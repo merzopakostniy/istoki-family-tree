@@ -178,6 +178,7 @@ function PersonCard({ person, selected, onSelect, register }) {
 }
 
 const CARD_WIDTH = 258;
+const CARD_HEIGHT = 118;
 const PARTNER_CONNECTOR_WIDTH = 42;
 const FAMILY_GAP = 94;
 const ROOT_FAMILY_GAP = 128;
@@ -274,12 +275,33 @@ function buildFamilyLayout(people) {
 }
 
 function FamilyUnit({ unit, selectedId, onSelect, register }) {
+  const anchor = unit.people.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, unit.people[0]);
+  const anchorIndex = unit.people.findIndex((person) => person.id === anchor.id);
+  const extraMarriages = anchor.partnerIds
+    .map((partnerId) => unit.people.findIndex((person) => person.id === partnerId))
+    .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
+  const cardCenter = (index) => index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
   return (
     <div
-      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"}`}
+      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""}`}
       style={{ left: `${unit.x}px`, top: `${unit.y}px` }}
       data-family={unit.id}
     >
+      {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT + 62}`} aria-hidden="true">
+        {extraMarriages.map((partnerIndex, index) => {
+          const anchorX = cardCenter(anchorIndex);
+          const partnerX = cardCenter(partnerIndex);
+          const branchX = partnerIndex > anchorIndex
+            ? partnerIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - PARTNER_CONNECTOR_WIDTH / 2
+            : (partnerIndex + 1) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - PARTNER_CONNECTOR_WIDTH / 2;
+          const railY = CARD_HEIGHT + 18 + index * 12;
+          return <g key={unit.people[partnerIndex].id}>
+            <path d={`M ${anchorX} ${CARD_HEIGHT} V ${railY} H ${partnerX} V ${CARD_HEIGHT} M ${branchX} ${CARD_HEIGHT / 2} V ${railY}`}/>
+            <circle cx={branchX - 3.5} cy={CARD_HEIGHT / 2} r="4.5"/>
+            <circle cx={branchX + 3.5} cy={CARD_HEIGHT / 2} r="4.5"/>
+          </g>;
+        })}
+      </svg> : null}
       {unit.people.map((person, index) => <React.Fragment key={person.id}>
         {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
         <PersonCard person={person} selected={person.id === selectedId} onSelect={onSelect} register={register}/>
@@ -466,6 +488,33 @@ function TreeConnections({ people, nodes, stage, scale }) {
           y: (side === "top" ? rect.top - base.top : side === "center" ? rect.top - base.top + rect.height / 2 : rect.bottom - base.top) / scale,
         };
       };
+      const parentOrigin = (parentIds) => {
+        if (parentIds.length === 1) return point(parentIds[0], "top");
+        const parentPeople = parentIds.map((id) => people.find((person) => person.id === id)).filter(Boolean);
+        const anchor = parentPeople.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, parentPeople[0]);
+        const partner = parentPeople.find((person) => person.id !== anchor?.id);
+        const anchorRect = anchor ? nodes.current.get(anchor.id)?.getBoundingClientRect() : null;
+        const partnerRect = partner ? nodes.current.get(partner.id)?.getBoundingClientRect() : null;
+        if (anchorRect && partnerRect && anchor.partnerIds.length > 2) {
+          const anchorCenter = anchorRect.left + anchorRect.width / 2;
+          const partnerCenter = partnerRect.left + partnerRect.width / 2;
+          const adjacentLimit = (anchorRect.width + partnerRect.width) / 2 + PARTNER_CONNECTOR_WIDTH * scale * 1.5;
+          if (Math.abs(anchorCenter - partnerCenter) > adjacentLimit) {
+            return {
+              x: partnerCenter > anchorCenter
+                ? (partnerRect.left - base.left) / scale - PARTNER_CONNECTOR_WIDTH / 2
+                : (partnerRect.right - base.left) / scale + PARTNER_CONNECTOR_WIDTH / 2,
+              y: (partnerRect.top - base.top + partnerRect.height / 2) / scale,
+            };
+          }
+        }
+        const parentPoints = parentIds.map((parentId) => point(parentId, "center")).filter(Boolean);
+        if (!parentPoints.length) return null;
+        return {
+          x: parentPoints.reduce((sum, item) => sum + item.x, 0) / parentPoints.length,
+          y: parentPoints.reduce((sum, item) => sum + item.y, 0) / parentPoints.length,
+        };
+      };
       const families = new Map();
       people.forEach((child) => {
         const parentIds = child.parents.filter((id) => nodes.current.has(id)).sort();
@@ -476,13 +525,9 @@ function TreeConnections({ people, nodes, stage, scale }) {
       });
       const next = [];
       families.forEach(({ parentIds, children }, familyId) => {
-        const parentPoints = parentIds.map((parentId) => point(parentId, parentIds.length > 1 ? "center" : "top")).filter(Boolean);
         const childPoints = children.map((childId) => point(childId, "bottom")).filter(Boolean).sort((first, second) => first.x - second.x);
-        if (!parentPoints.length || !childPoints.length) return;
-        const from = {
-          x: parentPoints.reduce((sum, item) => sum + item.x, 0) / parentPoints.length,
-          y: parentPoints.reduce((sum, item) => sum + item.y, 0) / parentPoints.length,
-        };
+        const from = parentOrigin(parentIds);
+        if (!from || !childPoints.length) return;
         const nearestChildY = Math.max(...childPoints.map((item) => item.y));
         const junctionY = from.y + (nearestChildY - from.y) * .5;
         const firstChildX = childPoints[0].x;
