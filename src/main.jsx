@@ -191,6 +191,17 @@ const EMPTY_STAGE_HEIGHT = 770;
 const STAGE_TOP = 28;
 const STAGE_BOTTOM = 54;
 const GENERATION_GAP = 190;
+const BRANCH_COLORS = ["#2f6b45", "#b75b38", "#376d8c", "#9a7020", "#76507c", "#26756f", "#a44d62", "#4e6093", "#6d7834", "#895a3c", "#39788d", "#843f55"];
+
+function marriageKey(firstId, secondId) {
+  return [firstId, secondId].filter(Boolean).sort().join("--");
+}
+
+function branchColor(key) {
+  let hash = 0;
+  for (const character of key || "family") hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  return BRANCH_COLORS[hash % BRANCH_COLORS.length];
+}
 
 function familyUnitWidth(people) {
   return people.length * CARD_WIDTH + Math.max(0, people.length - 1) * PARTNER_CONNECTOR_WIDTH;
@@ -305,10 +316,11 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
     .map((partnerId) => unit.people.findIndex((person) => person.id === partnerId))
     .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
   const cardCenter = (index) => index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
+  const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
   return (
     <div
       className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""}`}
-      style={{ left: `${unit.x}px`, top: `${unit.y}px` }}
+      style={{ left: `${unit.x}px`, top: `${unit.y}px`, "--family-color": unitColor }}
       data-family={unit.id}
     >
       {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT + 62}`} aria-hidden="true">
@@ -319,7 +331,8 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
             ? partnerIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - PARTNER_CONNECTOR_WIDTH / 2
             : (partnerIndex + 1) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - PARTNER_CONNECTOR_WIDTH / 2;
           const railY = CARD_HEIGHT + 18 + index * 12;
-          return <g key={unit.people[partnerIndex].id}>
+          const partner = unit.people[partnerIndex];
+          return <g key={partner.id} style={{ "--family-color": branchColor(marriageKey(anchor.id, partner.id)) }}>
             <path d={`M ${anchorX} ${CARD_HEIGHT} V ${railY} H ${partnerX} V ${CARD_HEIGHT} M ${branchX} ${CARD_HEIGHT / 2} V ${railY}`}/>
             <circle cx={branchX - 3.5} cy={CARD_HEIGHT / 2} r="4.5"/>
             <circle cx={branchX + 3.5} cy={CARD_HEIGHT / 2} r="4.5"/>
@@ -327,7 +340,7 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
         })}
       </svg> : null}
       {unit.people.map((person, index) => <React.Fragment key={person.id}>
-        {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
+        {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" style={{ "--family-color": branchColor(marriageKey(unit.people[index - 1].id, person.id)) }} role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
         <PersonCard person={person} selected={person.id === selectedId} onSelect={onSelect} register={register}/>
       </React.Fragment>)}
     </div>
@@ -582,7 +595,7 @@ function TreeConnections({ people, nodes, stage, scale }) {
         });
         while (usedLanes.has(route.lane)) route.lane += 1;
       });
-      const laneOffset = (lane) => lane === 0 ? 0 : (lane % 2 ? 1 : -1) * Math.ceil(lane / 2) * 20;
+      const laneOffset = (lane) => -8 - lane * 24;
       const next = orderedRoutes.map((route) => {
         const { id, childPoints, from, firstChildX, lastChildX } = route;
         const junctionY = Math.max(route.minY, Math.min(route.maxY, route.baseJunctionY + laneOffset(route.lane)));
@@ -590,7 +603,7 @@ function TreeConnections({ people, nodes, stage, scale }) {
         if (childPoints.length > 1) segments.push(`M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`);
         childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
         if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
-        return { id, d: segments.join(" ") };
+        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY };
       });
       setPaths(next);
     };
@@ -601,7 +614,7 @@ function TreeConnections({ people, nodes, stage, scale }) {
     window.addEventListener("resize", draw);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener("resize", draw); };
   }, [people, nodes, stage, scale]);
-  return <svg className="connections" aria-hidden="true">{paths.map((path) => <path key={path.id} d={path.d} className="parent-line" />)}</svg>;
+  return <svg className="connections" aria-hidden="true">{paths.map((path) => <g key={path.id} style={{ "--branch-color": path.color }}><path d={path.d} className="parent-line"/><circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="5"/></g>)}</svg>;
 }
 
 function App() {
