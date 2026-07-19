@@ -117,7 +117,7 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .positioned-family { position: absolute; z-index: 2; isolation: isolate; }
 .positioned-family.partner-pair::after { content: ""; position: absolute; z-index: -1; inset: -12px -14px; border: 1px dashed var(--family-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
 .marriage-rails { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 180px; overflow: visible; pointer-events: none; }
-.marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 2; stroke-linecap: square; stroke-linejoin: miter; vector-effect: non-scaling-stroke; }
+.marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 5 4; opacity: .8; vector-effect: non-scaling-stroke; }
 .marriage-rails circle { fill: var(--paper); stroke: var(--family-color, var(--green)); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .partner-pair { gap: 0; }
 .partner-connector { width: 42px; height: 18px; flex: 0 0 42px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; color: var(--family-color, var(--green)); }

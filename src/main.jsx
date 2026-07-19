@@ -334,15 +334,13 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
         {extraMarriages.map((partnerIndex, index) => {
           const anchorX = cardCenter(anchorIndex);
           const partnerX = cardCenter(partnerIndex);
-          const branchX = partnerIndex > anchorIndex
-            ? partnerIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - PARTNER_CONNECTOR_WIDTH / 2
-            : (partnerIndex + 1) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - PARTNER_CONNECTOR_WIDTH / 2;
-          const railY = CARD_HEIGHT + 18 + index * 12;
+          const railY = CARD_HEIGHT + 22 + index * 16;
+          const midX = (anchorX + partnerX) / 2;
           const partner = unit.people[partnerIndex];
-          return <g key={partner.id} style={{ "--family-color": branchColor(marriageKey(anchor.id, partner.id)) }}>
-            <path d={`M ${anchorX} ${CARD_HEIGHT} V ${railY} H ${partnerX} V ${CARD_HEIGHT} M ${branchX} ${CARD_HEIGHT / 2} V ${railY}`}/>
-            <circle cx={branchX - 3.5} cy={CARD_HEIGHT / 2} r="4.5"/>
-            <circle cx={branchX + 3.5} cy={CARD_HEIGHT / 2} r="4.5"/>
+          return <g key={partner.id} className="marriage-rail" style={{ "--family-color": branchColor(marriageKey(anchor.id, partner.id)) }}>
+            <path d={`M ${anchorX} ${CARD_HEIGHT} V ${railY} H ${partnerX} V ${CARD_HEIGHT}`}/>
+            <circle cx={midX - 4} cy={railY} r="4.5"/>
+            <circle cx={midX + 4} cy={railY} r="4.5"/>
           </g>;
         })}
       </svg> : null}
