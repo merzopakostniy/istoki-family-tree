@@ -177,17 +177,115 @@ function PersonCard({ person, selected, onSelect, register }) {
   );
 }
 
-function GenerationPeople({ people, selectedId, onSelect, register }) {
-  const units = groupPartnerUnits(people);
+const CARD_WIDTH = 258;
+const PARTNER_CONNECTOR_WIDTH = 42;
+const FAMILY_GAP = 94;
+const ROOT_FAMILY_GAP = 128;
+const STAGE_PADDING = 88;
+const STAGE_HEIGHT = 770;
+const GENERATION_TOP = { 3: 28, 2: 218, 1: 408, 0: 598 };
 
-  return units.map((unit) => (
-    <div className={`family-unit ${unit.length > 1 ? "partner-pair" : "single-person"}`} key={unit.map((person) => person.id).sort().join("-")}>
-      {unit.map((person, index) => <React.Fragment key={person.id}>
-        {index > 0 ? arePartners(unit[index - 1], person) ? <span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
+function familyUnitWidth(people) {
+  return people.length * CARD_WIDTH + Math.max(0, people.length - 1) * PARTNER_CONNECTOR_WIDTH;
+}
+
+function buildFamilyLayout(people) {
+  if (!people.length) return { units: [], width: 940, height: STAGE_HEIGHT };
+  const sourceOrder = new Map(people.map((person, index) => [person.id, index]));
+  const units = generationMeta.flatMap((generation) => groupPartnerUnits(people.filter((person) => person.generation === generation.id)).map((members) => ({
+    id: members.map((person) => person.id).sort().join("--"),
+    people: members,
+    generation: generation.id,
+    width: familyUnitWidth(members),
+    order: Math.min(...members.map((person) => sourceOrder.get(person.id) ?? 0)),
+    children: [],
+    primaryParentId: null,
+    subtreeWidth: 0,
+    x: 0,
+    y: GENERATION_TOP[generation.id] ?? 0,
+  })));
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
+  const unitByPersonId = new Map();
+  units.forEach((unit) => unit.people.forEach((person) => unitByPersonId.set(person.id, unit)));
+
+  units.forEach((unit) => {
+    const candidates = new Map();
+    unit.people.forEach((person) => person.parents.forEach((parentId) => {
+      const parentUnit = unitByPersonId.get(parentId);
+      if (!parentUnit || parentUnit.id === unit.id || parentUnit.generation >= unit.generation) return;
+      candidates.set(parentUnit.id, (candidates.get(parentUnit.id) || 0) + 1);
+    }));
+    const [primary] = [...candidates.entries()].sort((first, second) => {
+      if (second[1] !== first[1]) return second[1] - first[1];
+      const firstUnit = unitById.get(first[0]);
+      const secondUnit = unitById.get(second[0]);
+      if (secondUnit.generation !== firstUnit.generation) return secondUnit.generation - firstUnit.generation;
+      return firstUnit.order - secondUnit.order;
+    });
+    if (primary) {
+      unit.primaryParentId = primary[0];
+      unitById.get(primary[0]).children.push(unit);
+    }
+  });
+
+  const branchPosition = (parentUnit, childUnit) => {
+    const parentIndex = new Map(parentUnit.people.map((person, index) => [person.id, index]));
+    const positions = childUnit.people.flatMap((person) => person.parents.map((id) => parentIndex.get(id)).filter(Number.isFinite));
+    return positions.length ? positions.reduce((sum, value) => sum + value, 0) / positions.length : parentUnit.people.length / 2;
+  };
+  units.forEach((unit) => unit.children.sort((first, second) => branchPosition(unit, first) - branchPosition(unit, second) || first.order - second.order));
+
+  const measuring = new Set();
+  const measure = (unit) => {
+    if (unit.subtreeWidth) return unit.subtreeWidth;
+    if (measuring.has(unit.id)) return unit.width;
+    measuring.add(unit.id);
+    const descendantsWidth = unit.children.reduce((sum, child, index) => sum + measure(child) + (index ? FAMILY_GAP : 0), 0);
+    unit.subtreeWidth = Math.max(unit.width, descendantsWidth);
+    measuring.delete(unit.id);
+    return unit.subtreeWidth;
+  };
+  const placed = new Set();
+  const place = (unit, left) => {
+    if (placed.has(unit.id)) return;
+    placed.add(unit.id);
+    unit.x = left + (unit.subtreeWidth - unit.width) / 2;
+    const descendantsWidth = unit.children.reduce((sum, child, index) => sum + child.subtreeWidth + (index ? FAMILY_GAP : 0), 0);
+    let childLeft = left + (unit.subtreeWidth - descendantsWidth) / 2;
+    unit.children.forEach((child) => {
+      place(child, childLeft);
+      childLeft += child.subtreeWidth + FAMILY_GAP;
+    });
+  };
+
+  const roots = units.filter((unit) => !unit.primaryParentId).sort((first, second) => first.order - second.order);
+  roots.forEach(measure);
+  let cursor = STAGE_PADDING;
+  roots.forEach((root) => {
+    place(root, cursor);
+    cursor += root.subtreeWidth + ROOT_FAMILY_GAP;
+  });
+  units.filter((unit) => !placed.has(unit.id)).forEach((unit) => {
+    measure(unit);
+    place(unit, cursor);
+    cursor += unit.subtreeWidth + ROOT_FAMILY_GAP;
+  });
+  return { units, width: Math.max(940, cursor - ROOT_FAMILY_GAP + STAGE_PADDING), height: STAGE_HEIGHT };
+}
+
+function FamilyUnit({ unit, selectedId, onSelect, register }) {
+  return (
+    <div
+      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"}`}
+      style={{ left: `${unit.x}px`, top: `${unit.y}px` }}
+      data-family={unit.id}
+    >
+      {unit.people.map((person, index) => <React.Fragment key={person.id}>
+        {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
         <PersonCard person={person} selected={person.id === selectedId} onSelect={onSelect} register={register}/>
       </React.Fragment>)}
     </div>
-  ));
+  );
 }
 
 function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMove }) {
@@ -368,18 +466,32 @@ function TreeConnections({ people, nodes, stage, scale }) {
           y: (side === "top" ? rect.top - base.top : side === "center" ? rect.top - base.top + rect.height / 2 : rect.bottom - base.top) / scale,
         };
       };
-      const next = [];
+      const families = new Map();
       people.forEach((child) => {
-        const parentPoints = child.parents.map((parentId) => point(parentId, child.parents.length > 1 ? "center" : "top")).filter(Boolean);
-        if (!parentPoints.length) return;
-        const from = parentPoints.length > 1 ? {
+        const parentIds = child.parents.filter((id) => nodes.current.has(id)).sort();
+        if (!parentIds.length) return;
+        const key = parentIds.join("--");
+        if (!families.has(key)) families.set(key, { parentIds, children: [] });
+        families.get(key).children.push(child.id);
+      });
+      const next = [];
+      families.forEach(({ parentIds, children }, familyId) => {
+        const parentPoints = parentIds.map((parentId) => point(parentId, parentIds.length > 1 ? "center" : "top")).filter(Boolean);
+        const childPoints = children.map((childId) => point(childId, "bottom")).filter(Boolean).sort((first, second) => first.x - second.x);
+        if (!parentPoints.length || !childPoints.length) return;
+        const from = {
           x: parentPoints.reduce((sum, item) => sum + item.x, 0) / parentPoints.length,
           y: parentPoints.reduce((sum, item) => sum + item.y, 0) / parentPoints.length,
-        } : parentPoints[0];
-        const to = point(child.id, "bottom");
-        if (!from || !to) return;
-        const mid = from.y + (to.y - from.y) / 2;
-        next.push({ id: `${child.parents.join("-")}-${child.id}`, d: `M ${from.x} ${from.y} V ${mid} H ${to.x} V ${to.y}` });
+        };
+        const nearestChildY = Math.max(...childPoints.map((item) => item.y));
+        const junctionY = from.y + (nearestChildY - from.y) * .5;
+        const firstChildX = childPoints[0].x;
+        const lastChildX = childPoints[childPoints.length - 1].x;
+        const segments = [`M ${from.x} ${from.y} V ${junctionY}`];
+        if (childPoints.length > 1) segments.push(`M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`);
+        childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
+        if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
+        next.push({ id: familyId, d: segments.join(" ") });
       });
       setPaths(next);
     };
@@ -426,11 +538,8 @@ function App() {
   }, [notice]);
 
   const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const stageWidth = Math.max(940, ...generationMeta.map((generation) => {
-    const units = groupPartnerUnits(visiblePeople.filter((person) => person.generation === generation.id));
-    const cardsWidth = units.reduce((sum, unit) => sum + unit.length * 258 + Math.max(0, unit.length - 1) * 42, 0);
-    return cardsWidth + Math.max(0, units.length - 1) * 52 + 160;
-  }));
+  const familyLayout = buildFamilyLayout(visiblePeople);
+  const stageWidth = familyLayout.width;
   const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
   const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
@@ -561,8 +670,8 @@ function App() {
           </div>
 
           <div className="tree-board" ref={boardRef}>
-            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${720 * scale}px` }}>
-              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, transform: `scale(${scale})` }}>
+            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${familyLayout.height * scale}px` }}>
+              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${familyLayout.height}px`, transform: `scale(${scale})` }}>
                 {people.length === 0 ? (
                   <div className="empty-tree">
                     <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
@@ -572,11 +681,7 @@ function App() {
                   </div>
                 ) : <>
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale}/>
-                {generationMeta.map((generation) => (
-                  <div className={`tree-row generation-${generation.id}`} key={generation.id}>
-                    <GenerationPeople people={visiblePeople.filter((person) => person.generation === generation.id)} selectedId={selectedId} onSelect={setSelectedId} register={register}/>
-                  </div>
-                ))}
+                {familyLayout.units.map((unit) => <FamilyUnit key={unit.id} unit={unit} selectedId={selectedId} onSelect={setSelectedId} register={register}/>)}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
                 </>}
               </div>
