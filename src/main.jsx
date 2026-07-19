@@ -1,9 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { generationMeta, seedPeople } from "./data";
+import { generationMeta } from "./data";
 import "./styles.css";
 
-const STORAGE_KEY = "istoki-family-tree-v1";
+const STORAGE_KEY = "istoki-family-tree-v2";
 
 function Icon({ name, size = 20 }) {
   const paths = {
@@ -17,6 +17,7 @@ function Icon({ name, size = 20 }) {
     target: <><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></>,
     chevron: <path d="m9 6 6 6-6 6"/>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
+    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
   };
   return <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -48,7 +49,7 @@ function PersonCard({ person, selected, onSelect, register }) {
   );
 }
 
-function DetailPanel({ person, people, onClose, onEdit, onSelect }) {
+function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
   if (!person) return null;
   const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || item.id === person.partnerId);
   return (
@@ -78,6 +79,7 @@ function DetailPanel({ person, people, onClose, onEdit, onSelect }) {
         <button className="button secondary" onClick={onEdit}><Icon name="edit" size={18}/>Редактировать</button>
         <button className="button ghost" onClick={onClose}>Закрыть</button>
       </div>
+      <button className="delete-action" onClick={onDelete}><Icon name="trash" size={17}/>Удалить человека</button>
     </aside>
   );
 }
@@ -91,8 +93,8 @@ function PersonEditor({ person, people, onSave, onClose }) {
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const submit = (event) => {
     event.preventDefault();
-    const parent = event.currentTarget.elements.parentId.value;
-    onSave({ ...form, parents: parent ? [parent] : form.parents || [] });
+    const parentIds = [event.currentTarget.elements.parentId1.value, event.currentTarget.elements.parentId2.value].filter((id, index, all) => id && all.indexOf(id) === index);
+    onSave({ ...form, parents: parentIds });
   };
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -104,13 +106,31 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label>Год смерти<input name="death" inputMode="numeric" value={form.death} onChange={(e) => update("death", e.target.value)} /></label>
           <label>Поколение<select value={form.generation} onChange={(e) => update("generation", Number(e.target.value))}>{generationMeta.slice().reverse().map((gen) => <option value={gen.id} key={gen.id}>{gen.label}</option>)}</select></label>
           <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
-          <label className="wide">Родитель<select name="parentId" defaultValue={form.parents?.[0] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Первый родитель<select name="parentId1" defaultValue={form.parents?.[0] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Второй родитель<select name="parentId2" defaultValue={form.parents?.[1] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="wide">Супруг или супруга<select value={form.partnerId || ""} onChange={(e) => update("partnerId", e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
           <label className="wide">Профессия<input value={form.occupation} onChange={(e) => update("occupation", e.target.value)} /></label>
           <label className="wide">Заметка<textarea rows="3" value={form.note} onChange={(e) => update("note", e.target.value)} /></label>
         </div>
         <div className="editor-actions"><button type="button" className="button ghost" onClick={onClose}>Отмена</button><button className="button primary" type="submit">Сохранить</button></div>
       </form>
+    </div>
+  );
+}
+
+function ConfirmDelete({ person, onConfirm, onClose }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+        <span className="confirm-icon"><Icon name="trash" size={24}/></span>
+        <h2 id="delete-title">Удалить {person.name}?</h2>
+        <p>Карточка исчезнет из древа. Остальные родственники сохранятся, а связанные линии будут аккуратно удалены.</p>
+        <div className="confirm-actions">
+          <button className="button ghost" onClick={onClose}>Отмена</button>
+          <button className="button danger" onClick={onConfirm}>Удалить</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -162,10 +182,11 @@ function TreeConnections({ people, nodes, stage, scale }) {
 
 function App() {
   const [people, setPeople] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || seedPeople; } catch { return seedPeople; }
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
   });
-  const [selectedId, setSelectedId] = useState("anna");
+  const [selectedId, setSelectedId] = useState(null);
   const [editor, setEditor] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [scale, setScale] = useState(1);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -190,15 +211,37 @@ function App() {
   };
   const savePerson = (draft) => {
     if (draft.id) {
-      setPeople((current) => current.map((person) => person.id === draft.id ? draft : person));
+      setPeople((current) => {
+        const previous = current.find((person) => person.id === draft.id);
+        return current.map((person) => {
+          if (person.id === draft.id) return draft;
+          if (person.id === previous?.partnerId && previous.partnerId !== draft.partnerId && person.partnerId === draft.id) return { ...person, partnerId: "" };
+          if (person.id === draft.partnerId) return { ...person, partnerId: draft.id };
+          return person;
+        });
+      });
       setSelectedId(draft.id);
     } else {
       const created = { ...draft, id: `person-${Date.now()}`, partnerId: draft.partnerId || "" };
-      setPeople((current) => [...current, created]);
+      setPeople((current) => [...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id } : person), created]);
       setSelectedId(created.id);
     }
     setEditor(false);
     setNotice("Запись сохранена в этом браузере");
+  };
+  const deletePerson = () => {
+    if (!deleteCandidate) return;
+    const id = deleteCandidate.id;
+    setPeople((current) => current
+      .filter((person) => person.id !== id)
+      .map((person) => ({
+        ...person,
+        parents: person.parents.filter((parentId) => parentId !== id),
+        partnerId: person.partnerId === id ? "" : person.partnerId,
+      })));
+    setSelectedId(null);
+    setDeleteCandidate(null);
+    setNotice("Человек удалён из древа");
   };
 
   return (
@@ -238,6 +281,14 @@ function App() {
           <div className="tree-board" ref={boardRef}>
             <div className="tree-scaler" style={{ width: `${100 * scale}%`, minHeight: `${720 * scale}px` }}>
               <div className="tree-stage" ref={stageRef} style={{ transform: `scale(${scale})` }}>
+                {people.length === 0 ? (
+                  <div className="empty-tree">
+                    <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
+                    <h2>Начните с корней</h2>
+                    <p>Добавьте самого дальнего известного предка. От него постепенно вырастут ветви вашей семьи.</p>
+                    <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button>
+                  </div>
+                ) : <>
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale}/>
                 {generationMeta.map((generation) => (
                   <div className={`tree-row generation-${generation.id}`} key={generation.id}>
@@ -246,14 +297,16 @@ function App() {
                   </div>
                 ))}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
+                </>}
               </div>
             </div>
           </div>
         </section>
 
-        <DetailPanel person={selected} people={people} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onSelect={setSelectedId}/>
+        <DetailPanel person={selected} people={people} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId}/>
       </main>
       {editor && <PersonEditor person={editor === "new" ? null : editor} people={people} onSave={savePerson} onClose={() => setEditor(false)}/>}
+      {deleteCandidate && <ConfirmDelete person={deleteCandidate} onConfirm={deletePerson} onClose={() => setDeleteCandidate(null)}/>}
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>
   );
