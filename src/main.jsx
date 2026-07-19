@@ -548,20 +548,49 @@ function TreeConnections({ people, nodes, stage, scale }) {
         if (!families.has(key)) families.set(key, { parentIds, children: [] });
         families.get(key).children.push(child.id);
       });
-      const next = [];
+      const routes = [];
       families.forEach(({ parentIds, children }, familyId) => {
         const childPoints = children.map((childId) => point(childId, "bottom")).filter(Boolean).sort((first, second) => first.x - second.x);
         const from = parentOrigin(parentIds);
         if (!from || !childPoints.length) return;
         const nearestChildY = Math.max(...childPoints.map((item) => item.y));
-        const junctionY = from.y + (nearestChildY - from.y) * .5;
         const firstChildX = childPoints[0].x;
         const lastChildX = childPoints[childPoints.length - 1].x;
+        routes.push({
+          id: familyId,
+          parentIds,
+          childPoints,
+          from,
+          firstChildX,
+          lastChildX,
+          baseJunctionY: from.y + (nearestChildY - from.y) * .5,
+          minY: Math.min(from.y, nearestChildY) + 16,
+          maxY: Math.max(from.y, nearestChildY) - 16,
+          left: Math.min(firstChildX, from.x),
+          right: Math.max(lastChildX, from.x),
+          lane: 0,
+        });
+      });
+      const orderedRoutes = routes.slice().sort((first, second) => first.left - second.left || first.from.x - second.from.x);
+      orderedRoutes.forEach((route, routeIndex) => {
+        const usedLanes = new Set();
+        orderedRoutes.slice(0, routeIndex).forEach((previous) => {
+          const sameLevel = Math.abs(previous.baseJunctionY - route.baseJunctionY) < 8;
+          const overlaps = Math.min(previous.right, route.right) - Math.max(previous.left, route.left) > -8;
+          const sharesParent = previous.parentIds.some((parentId) => route.parentIds.includes(parentId));
+          if (sameLevel && (overlaps || sharesParent)) usedLanes.add(previous.lane);
+        });
+        while (usedLanes.has(route.lane)) route.lane += 1;
+      });
+      const laneOffset = (lane) => lane === 0 ? 0 : (lane % 2 ? 1 : -1) * Math.ceil(lane / 2) * 20;
+      const next = orderedRoutes.map((route) => {
+        const { id, childPoints, from, firstChildX, lastChildX } = route;
+        const junctionY = Math.max(route.minY, Math.min(route.maxY, route.baseJunctionY + laneOffset(route.lane)));
         const segments = [`M ${from.x} ${from.y} V ${junctionY}`];
         if (childPoints.length > 1) segments.push(`M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`);
         childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
         if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
-        next.push({ id: familyId, d: segments.join(" ") });
+        return { id, d: segments.join(" ") };
       });
       setPaths(next);
     };
