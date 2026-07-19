@@ -35,11 +35,12 @@ function years(person) {
 }
 
 function normalizePerson(person) {
-  const { occupation: _removedOccupation, ...clean } = person;
+  const { occupation: _removedOccupation, partnerId: legacyPartnerId, ...clean } = person;
+  const partnerIds = Array.isArray(clean.partnerIds) ? clean.partnerIds : legacyPartnerId ? [legacyPartnerId] : [];
   return {
     ...clean,
     parents: Array.isArray(clean.parents) ? clean.parents : [],
-    partnerId: clean.partnerId || "",
+    partnerIds: [...new Set(partnerIds.filter(Boolean))],
     birthplace: clean.birthplace || "",
     deathplace: clean.deathplace || "",
     maidenName: clean.maidenName || "",
@@ -56,12 +57,11 @@ function normalizePeople(people) {
   const normalized = people.map(normalizePerson);
   const byId = new Map(normalized.map((person) => [person.id, person]));
   normalized.forEach((person) => {
-    const partner = byId.get(person.partnerId);
-    if (!partner) {
-      person.partnerId = "";
-      return;
-    }
-    partner.partnerId = person.id;
+    person.partnerIds = person.partnerIds.filter((id) => id !== person.id && byId.has(id));
+    person.partnerIds.forEach((partnerId) => {
+      const partner = byId.get(partnerId);
+      if (!partner.partnerIds.includes(person.id)) partner.partnerIds.push(person.id);
+    });
   });
   for (let pass = 0; pass < generationMeta.length; pass += 1) {
     normalized.forEach((person) => {
@@ -70,8 +70,10 @@ function normalizePeople(people) {
         const highestParent = Math.max(...parentGenerations);
         if (!person.manualGeneration && person.generation <= highestParent) person.generation = Math.min(3, highestParent + 1);
       }
-      const partner = byId.get(person.partnerId);
-      if (partner) person.generation = partner.generation = Math.max(person.generation, partner.generation);
+      person.partnerIds.forEach((partnerId) => {
+        const partner = byId.get(partnerId);
+        if (partner) person.generation = partner.generation = Math.max(person.generation, partner.generation);
+      });
     });
   }
   return normalized;
@@ -83,20 +85,33 @@ function groupPartnerUnits(people) {
   const units = [];
   people.forEach((person) => {
     if (seen.has(person.id)) return;
-    const partner = byId.get(person.partnerId) || people.find((item) => item.partnerId === person.id);
-    seen.add(person.id);
-    if (partner && !seen.has(partner.id)) {
-      seen.add(partner.id);
-      units.push([person, partner]);
-    } else {
-      units.push([person]);
+    const component = [];
+    const queue = [person];
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || seen.has(current.id)) continue;
+      seen.add(current.id);
+      component.push(current);
+      current.partnerIds.forEach((id) => { if (byId.has(id) && !seen.has(id)) queue.push(byId.get(id)); });
     }
+    if (component.length < 3) {
+      units.push(component);
+      return;
+    }
+    const anchor = component.reduce((best, item) => item.partnerIds.length > best.partnerIds.length ? item : best, component[0]);
+    const partners = component.filter((item) => anchor.partnerIds.includes(item.id));
+    const remaining = component.filter((item) => item.id !== anchor.id && !anchor.partnerIds.includes(item.id));
+    units.push([partners[0], anchor, ...partners.slice(1), ...remaining].filter(Boolean));
   });
   return units;
 }
 
+function arePartners(first, second) {
+  return first.partnerIds.includes(second.id) || second.partnerIds.includes(first.id);
+}
+
 function relationshipLabel(person, relative) {
-  if (relative.id === person.partnerId || relative.partnerId === person.id) return "Супруг / супруга";
+  if (person.partnerIds.includes(relative.id) || relative.partnerIds.includes(person.id)) return "Супруг / супруга";
   if (person.parents.includes(relative.id)) return "Родитель";
   if (relative.parents.includes(person.id)) return "Ребёнок";
   return relative.relation || "Родственник";
@@ -166,16 +181,18 @@ function GenerationPeople({ people, selectedId, onSelect, register }) {
   const units = groupPartnerUnits(people);
 
   return units.map((unit) => (
-    <div className={`family-unit ${unit.length === 2 ? "partner-pair" : "single-person"}`} key={unit.map((person) => person.id).sort().join("-")}>
-      <PersonCard person={unit[0]} selected={unit[0].id === selectedId} onSelect={onSelect} register={register}/>
-      {unit.length === 2 ? <><span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span><PersonCard person={unit[1]} selected={unit[1].id === selectedId} onSelect={onSelect} register={register}/></> : null}
+    <div className={`family-unit ${unit.length > 1 ? "partner-pair" : "single-person"}`} key={unit.map((person) => person.id).sort().join("-")}>
+      {unit.map((person, index) => <React.Fragment key={person.id}>
+        {index > 0 ? arePartners(unit[index - 1], person) ? <span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
+        <PersonCard person={person} selected={person.id === selectedId} onSelect={onSelect} register={register}/>
+      </React.Fragment>)}
     </div>
   ));
 }
 
 function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMove }) {
   if (!person) return null;
-  const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || item.id === person.partnerId || item.partnerId === person.id);
+  const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || person.partnerIds.includes(item.id) || item.partnerIds.includes(person.id));
   const generation = generationMeta.find((item) => item.id === person.generation);
   return (
     <aside className="detail-panel" aria-label={`Сведения: ${person.name}`}>
@@ -231,7 +248,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
   const [photoError, setPhotoError] = useState("");
   const [form, setForm] = useState({
     name: "", birth: "", death: "", relation: "", generation: 0,
-    parents: [], partnerId: "", birthplace: "", deathplace: "", maidenName: "", note: "",
+    parents: [], partnerIds: [], birthplace: "", deathplace: "", maidenName: "", note: "",
     photo: "", photoX: 50, photoY: 50, photoScale: 1,
     ...(person ? normalizePerson(person) : {}),
   });
@@ -259,6 +276,13 @@ function PersonEditor({ person, people, onSave, onClose }) {
       const parentGenerations = uniqueParents.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
       const generation = parentGenerations.length ? Math.min(3, Math.max(...parentGenerations) + 1) : current.generation;
       return { ...current, parents: uniqueParents, generation, manualGeneration: false };
+    });
+  };
+  const togglePartner = (partnerId, checked) => {
+    setForm((current) => {
+      const partnerIds = checked ? [...new Set([...current.partnerIds, partnerId])] : current.partnerIds.filter((id) => id !== partnerId);
+      const generations = partnerIds.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
+      return { ...current, partnerIds, generation: generations.length ? Math.max(...generations) : current.generation };
     });
   };
   const submit = (event) => {
@@ -295,7 +319,13 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
           <label>Первый родитель<select name="parentId1" value={form.parents?.[0] || ""} onChange={(e) => chooseParent(0, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Второй родитель<select name="parentId2" value={form.parents?.[1] || ""} onChange={(e) => chooseParent(1, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label className="wide">Супруг или супруга<select value={form.partnerId || ""} onChange={(e) => { const partnerId = e.target.value; const partner = people.find((item) => item.id === partnerId); setForm((current) => ({ ...current, partnerId, generation: partner?.generation ?? current.generation })); }}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <fieldset className="wide spouse-field">
+            <legend>Супруги и супруги</legend>
+            <div className="spouse-options">
+              {people.filter((item) => item.id !== person?.id).map((item) => <label className="spouse-option" key={item.id}><input type="checkbox" checked={form.partnerIds.includes(item.id)} onChange={(e) => togglePartner(item.id, e.target.checked)}/><span>{item.name}</span></label>)}
+              {people.filter((item) => item.id !== person?.id).length === 0 ? <span className="empty-spouse-copy">Сначала добавьте второго человека</span> : null}
+            </div>
+          </fieldset>
           <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
           <label className="wide">Место смерти<input value={form.deathplace} onChange={(e) => update("deathplace", e.target.value)} /></label>
@@ -398,7 +428,7 @@ function App() {
   const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
   const stageWidth = Math.max(940, ...generationMeta.map((generation) => {
     const units = groupPartnerUnits(visiblePeople.filter((person) => person.generation === generation.id));
-    const cardsWidth = units.reduce((sum, unit) => sum + (unit.length === 2 ? 558 : 258), 0);
+    const cardsWidth = units.reduce((sum, unit) => sum + unit.length * 258 + Math.max(0, unit.length - 1) * 42, 0);
     return cardsWidth + Math.max(0, units.length - 1) * 52 + 160;
   }));
   const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
@@ -437,15 +467,17 @@ function App() {
         const previous = current.find((person) => person.id === draft.id);
         return normalizePeople(current.map((person) => {
           if (person.id === normalizedDraft.id) return normalizedDraft;
-          if (person.id === previous?.partnerId && previous.partnerId !== normalizedDraft.partnerId && person.partnerId === normalizedDraft.id) return { ...person, partnerId: "" };
-          if (person.id === normalizedDraft.partnerId) return { ...person, partnerId: normalizedDraft.id, generation: normalizedDraft.generation };
+          const wasPartner = previous?.partnerIds.includes(person.id);
+          const isPartner = normalizedDraft.partnerIds.includes(person.id);
+          if (isPartner) return { ...person, partnerIds: [...new Set([...person.partnerIds, normalizedDraft.id])], generation: normalizedDraft.generation };
+          if (wasPartner) return { ...person, partnerIds: person.partnerIds.filter((id) => id !== normalizedDraft.id) };
           return person;
         }));
       });
       setSelectedId(normalizedDraft.id);
     } else {
       const created = { ...normalizedDraft, id: `person-${Date.now()}` };
-      setPeople((current) => normalizePeople([...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id, generation: created.generation } : person), created]));
+      setPeople((current) => normalizePeople([...current.map((person) => created.partnerIds.includes(person.id) ? { ...person, partnerIds: [...new Set([...person.partnerIds, created.id])], generation: created.generation } : person), created]));
       setSelectedId(created.id);
     }
     setEditor(false);
@@ -455,8 +487,15 @@ function App() {
     setPeople((current) => {
       const person = current.find((item) => item.id === id);
       if (!person) return current;
-      const partner = current.find((item) => item.id === person.partnerId || item.partnerId === person.id);
-      const familyIds = new Set([person.id, partner?.id].filter(Boolean));
+      const byId = new Map(current.map((item) => [item.id, item]));
+      const familyIds = new Set();
+      const queue = [person.id];
+      while (queue.length) {
+        const familyId = queue.shift();
+        if (familyIds.has(familyId)) continue;
+        familyIds.add(familyId);
+        byId.get(familyId)?.partnerIds.forEach((partnerId) => { if (!familyIds.has(partnerId)) queue.push(partnerId); });
+      }
 
       if (direction === "up" || direction === "down") {
         const step = direction === "up" ? 1 : -1;
@@ -485,7 +524,7 @@ function App() {
       .map((person) => ({
         ...person,
         parents: person.parents.filter((parentId) => parentId !== id),
-        partnerId: person.partnerId === id ? "" : person.partnerId,
+        partnerIds: person.partnerIds.filter((partnerId) => partnerId !== id),
       })));
     setSelectedId(null);
     setDeleteCandidate(null);
@@ -510,11 +549,6 @@ function App() {
       </header>
 
       <main id="tree" className="workspace">
-        <aside className="generation-rail" aria-label="Поколения">
-          {generationMeta.map((item) => <div className="generation-marker" key={item.id}><span className={`marker-dot ${item.tone}`}/><span>{item.label}</span></div>)}
-          <svg className="botanical" viewBox="0 0 100 130" aria-hidden="true"><path d="M10 126C25 92 34 63 50 20M24 94c-14-4-17-14-15-25 11 4 18 11 15 25Zm12-23c11-2 18-9 20-20-11 0-19 6-20 20Zm4 20c-8-8-8-18-3-27 9 7 11 16 3 27Zm-22 18c-9-2-15-8-17-17 10 0 16 6 17 17Zm29-52c-7-8-6-17-1-26 8 7 9 15 1 26Z"/></svg>
-        </aside>
-
         <section className={`tree-area ${selected ? "has-detail" : ""}`} aria-label="Семейное древо">
           <div className="canvas-heading">
             <div><h1>Семейное древо</h1><p>Начните с самых дальних известных предков</p></div>
@@ -540,7 +574,6 @@ function App() {
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale}/>
                 {generationMeta.map((generation) => (
                   <div className={`tree-row generation-${generation.id}`} key={generation.id}>
-                    <span className="mobile-generation-label">{generation.label}</span>
                     <GenerationPeople people={visiblePeople.filter((person) => person.generation === generation.id)} selectedId={selectedId} onSelect={setSelectedId} register={register}/>
                   </div>
                 ))}

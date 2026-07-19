@@ -75,17 +75,9 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .button.danger:hover { background: #813321; }
 .add-button { min-height: 50px; padding: 0 22px; font-size: 15px; }
 
-.workspace { height: calc(100vh - 86px); display: grid; grid-template-columns: 150px minmax(0, 1fr); position: relative; }
-.generation-rail { border-right: 1px solid var(--line); background: rgba(255,254,250,.7); padding: 38px 18px 20px 32px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
-.generation-rail::before { content: ""; position: absolute; left: 36px; top: 54px; bottom: 80px; border-left: 1px dashed #bdb9aa; }
-.generation-marker { min-height: 76px; position: relative; z-index: 1; display: flex; gap: 14px; align-items: flex-start; font-size: 13px; line-height: 1.4; }
-.marker-dot { width: 19px; height: 19px; flex: 0 0 auto; border-radius: 50%; background: var(--paper); border: 4px solid var(--paper); box-shadow: 0 0 0 1px currentColor; }
-.marker-dot.green { color: var(--green); background: #698259; }
-.marker-dot.gold { color: var(--gold); background: var(--gold); }
-.marker-dot.terracotta { color: var(--terra); background: var(--terra); }
-.botanical { position: absolute; width: 100px; height: 130px; left: -7px; bottom: -10px; fill: none; stroke: #9caa86; stroke-width: .7; opacity: .65; }
+.workspace { height: calc(100vh - 86px); position: relative; }
 
-.tree-area { min-width: 0; position: relative; overflow: hidden; background-color: var(--paper); background-image: radial-gradient(rgba(62,70,52,.045) .7px, transparent .7px); background-size: 6px 6px; transition: margin-right .22s ease; }
+.tree-area { min-width: 0; height: 100%; position: relative; overflow: hidden; background-color: var(--paper); background-image: radial-gradient(rgba(62,70,52,.045) .7px, transparent .7px); background-size: 6px 6px; transition: margin-right .22s ease; }
 .tree-area.has-detail { margin-right: 354px; }
 .canvas-heading { height: 102px; padding: 22px 28px 10px 30px; display: flex; align-items: flex-start; justify-content: space-between; position: relative; z-index: 4; }
 .canvas-heading h1 { margin: 0; font: 44px/1.05 Georgia, "Times New Roman", serif; letter-spacing: -.035em; font-weight: 400; }
@@ -108,11 +100,11 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .partner-connector::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 2px solid currentColor; }
 .partner-connector i { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; background: var(--paper); position: relative; z-index: 1; }
 .partner-connector i + i { margin-left: -3px; }
+.partner-spacer { width: 42px; flex: 0 0 42px; }
 .generation-3 { top: 18px; }
 .generation-2 { top: 190px; }
 .generation-1 { top: 370px; }
 .generation-0 { top: 555px; }
-.mobile-generation-label { display: none; }
 
 .person-card { width: 258px; min-height: 118px; border: 1px solid #c9c1ae; border-radius: 11px; background: rgba(255,254,250,.96); display: flex; align-items: center; padding: 13px; gap: 14px; text-align: left; cursor: pointer; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
 .person-card:hover { transform: translateY(-2px); border-color: #809070; box-shadow: 0 8px 20px rgba(46,52,39,.09); }
@@ -189,6 +181,14 @@ dd { margin: 0; }
 .form-grid input, .form-grid select, .form-grid textarea { width: 100%; border: 1px solid #cbc8bd; border-radius: 8px; background: white; color: var(--ink); padding: 10px 11px; outline: none; font-size: 14px; font-weight: 400; }
 .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(41,77,49,.1); }
 .form-grid textarea { resize: vertical; }
+.spouse-field { min-width: 0; margin: 0; padding: 0; border: 0; }
+.spouse-field legend { margin-bottom: 7px; color: #555950; font-size: 12px; font-weight: 650; }
+.spouse-options { max-height: 156px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; padding: 6px; border: 1px solid #cbc8bd; border-radius: 8px; background: white; }
+.form-grid .spouse-option { min-width: 0; min-height: 36px; padding: 7px 8px; display: flex; flex-direction: row; align-items: center; gap: 8px; border-radius: 6px; color: var(--ink); font-size: 12px; font-weight: 400; cursor: pointer; }
+.form-grid .spouse-option:hover { background: #f1f2ec; }
+.form-grid .spouse-option input { width: 16px; height: 16px; flex: 0 0 auto; margin: 0; padding: 0; accent-color: var(--green); box-shadow: none; }
+.spouse-option span { min-width: 0; overflow-wrap: anywhere; }
+.empty-spouse-copy { padding: 8px; color: var(--muted); font-size: 11px; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .confirm-dialog { width: min(430px, 100%); background: var(--surface); border: 1px solid #cbc7bc; border-radius: 14px; box-shadow: 0 24px 80px rgba(29,31,25,.2); padding: 30px; text-align: center; }
 .confirm-icon { width: 54px; height: 54px; margin: 0 auto 17px; display: grid; place-items: center; border-radius: 50%; color: #9d3f2b; background: #f8e8e2; }
@@ -204,9 +204,6 @@ dd { margin: 0; }
   .tree-rings { width: 43px; height: 43px; }
   nav { gap: 10px; }
   .nav-item span { display: none; }
-  .workspace { grid-template-columns: 116px minmax(0, 1fr); }
-  .generation-rail { padding-left: 20px; }
-  .generation-rail::before { left: 24px; }
   .detail-panel { width: 330px; }
   .tree-area.has-detail { margin-right: 330px; }
   .add-button span { display: none; }
@@ -225,16 +222,15 @@ dd { margin: 0; }
   .search-input { position: absolute; top: 72px; left: 12px; right: 12px; width: auto; z-index: 30; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
   .workspace { height: calc(100vh - 68px); display: block; }
   .tree-area.has-detail { margin-right: 0; }
-  .generation-rail { display: none; }
   .canvas-heading { height: auto; min-height: 122px; padding: 18px 16px 12px; display: block; }
   .canvas-heading h1 { font-size: 36px; }
   .zoom-controls { margin-top: 16px; width: fit-content; }
   .tree-board { height: calc(100% - 122px); padding-inline: 8px; }
   .tree-scaler, .tree-stage { min-width: 760px; }
   .tree-stage { height: 760px; }
-  .tree-row { justify-content: flex-start; gap: 18px; padding-left: 76px; }
+  .tree-row { justify-content: flex-start; gap: 18px; padding-inline: 24px; }
   .partner-connector { width: 30px; flex-basis: 30px; }
-  .mobile-generation-label { display: block; position: absolute; left: 10px; top: 38px; width: 58px; color: var(--muted); font-size: 10px; line-height: 1.25; }
+  .partner-spacer { width: 30px; flex-basis: 30px; }
   .person-card { width: 230px; min-height: 116px; padding: 12px; gap: 12px; }
   .empty-tree { inset: 84px auto auto 16px; width: 340px; margin: 0; }
   .empty-tree h2 { font-size: 31px; }
@@ -246,6 +242,7 @@ dd { margin: 0; }
   .settings-button { display: none; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
+  .spouse-options { grid-template-columns: 1fr; }
   .editor { padding: 20px; }
   .photo-editor { grid-template-columns: 82px 1fr; gap: 14px; }
   .editor-photo-preview { width: 70px; height: 94px; font-size: 18px; }
