@@ -184,8 +184,8 @@ const CARD_WIDTH = 258;
 const CARD_HEIGHT = 118;
 const PARTNER_CONNECTOR_WIDTH = 42;
 const SIBLING_GAP = 66;
-const RELATED_FAMILY_GAP = 98;
-const UNRELATED_FAMILY_GAP = 148;
+const MARRIAGE_BRANCH_GAP = 164;
+const ROOT_FAMILY_GAP = 132;
 const STAGE_PADDING = 88;
 const EMPTY_STAGE_HEIGHT = 770;
 const STAGE_TOP = 28;
@@ -202,131 +202,96 @@ function buildFamilyLayout(people) {
   const generations = [...new Set(people.map((person) => person.generation))].sort((first, second) => second - first);
   const highestGeneration = generations[0];
   const lowestGeneration = generations[generations.length - 1];
-  const layers = new Map();
   const units = generations.flatMap((generation) => groupPartnerUnits(people.filter((person) => person.generation === generation)).map((members) => ({
     id: members.map((person) => person.id).sort().join("--"),
     people: members,
     generation,
     width: familyUnitWidth(members),
     order: Math.min(...members.map((person) => sourceOrder.get(person.id) ?? 0)),
-    parentUnits: new Set(),
-    childUnits: new Set(),
-    parentFamilyKeys: new Set(members.map((person) => person.parents.slice().sort().join("--")).filter(Boolean)),
+    children: [],
+    primaryParentId: null,
+    primaryMarriageKey: "",
+    subtreeWidth: 0,
     x: 0,
     y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
   })));
-  generations.forEach((generation) => layers.set(generation, units.filter((unit) => unit.generation === generation)));
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const unitByPersonId = new Map();
   units.forEach((unit) => unit.people.forEach((person) => unitByPersonId.set(person.id, unit)));
 
   units.forEach((unit) => {
-    unit.people.forEach((person) => person.parents.forEach((parentId) => {
+    const candidates = new Map();
+    unit.people.forEach((person, memberIndex) => person.parents.forEach((parentId) => {
       const parentUnit = unitByPersonId.get(parentId);
       if (!parentUnit || parentUnit.id === unit.id || parentUnit.generation >= unit.generation) return;
-      unit.parentUnits.add(parentUnit);
-      parentUnit.childUnits.add(unit);
+      const candidate = candidates.get(parentUnit.id) || { count: 0, firstMemberIndex: memberIndex };
+      candidate.count += 1;
+      candidate.firstMemberIndex = Math.min(candidate.firstMemberIndex, memberIndex);
+      candidates.set(parentUnit.id, candidate);
     }));
+    const [primary] = [...candidates.entries()].sort((first, second) => {
+      if (second[1].count !== first[1].count) return second[1].count - first[1].count;
+      if (first[1].firstMemberIndex !== second[1].firstMemberIndex) return first[1].firstMemberIndex - second[1].firstMemberIndex;
+      const firstUnit = unitById.get(first[0]);
+      const secondUnit = unitById.get(second[0]);
+      if (secondUnit.generation !== firstUnit.generation) return secondUnit.generation - firstUnit.generation;
+      return firstUnit.order - secondUnit.order;
+    });
+    if (primary) {
+      const parentUnit = unitById.get(primary[0]);
+      const parentIds = new Set(parentUnit.people.map((person) => person.id));
+      unit.primaryParentId = primary[0];
+      unit.primaryMarriageKey = unit.people.flatMap((person) => person.parents.filter((parentId) => parentIds.has(parentId))).sort().join("--");
+      parentUnit.children.push(unit);
+    }
   });
 
   const branchPosition = (parentUnit, childUnit) => {
     const parentIndex = new Map(parentUnit.people.map((person, index) => [person.id, index]));
     const positions = childUnit.people.flatMap((person) => person.parents.map((id) => parentIndex.get(id)).filter(Number.isFinite));
-    return positions.length ? positions.reduce((sum, value) => sum + value, 0) / positions.length : (parentUnit.people.length - 1) / 2;
+    return positions.length ? positions.reduce((sum, value) => sum + value, 0) / positions.length : parentUnit.people.length / 2;
   };
-  const makeRanks = () => {
-    const ranks = new Map();
-    layers.forEach((layer) => layer.forEach((unit, index) => ranks.set(unit.id, layer.length > 1 ? index / (layer.length - 1) : .5)));
-    return ranks;
+  const childGap = (first, second) => first.primaryMarriageKey && first.primaryMarriageKey === second.primaryMarriageKey ? SIBLING_GAP : MARRIAGE_BRANCH_GAP;
+  units.forEach((unit) => unit.children.sort((first, second) => branchPosition(unit, first) - branchPosition(unit, second) || first.order - second.order));
+
+  const measuring = new Set();
+  const measure = (unit) => {
+    if (unit.subtreeWidth) return unit.subtreeWidth;
+    if (measuring.has(unit.id)) return unit.width;
+    measuring.add(unit.id);
+    const descendantsWidth = unit.children.reduce((sum, child, index) => sum + measure(child) + (index ? childGap(unit.children[index - 1], child) : 0), 0);
+    unit.subtreeWidth = Math.max(unit.width, descendantsWidth);
+    measuring.delete(unit.id);
+    return unit.subtreeWidth;
   };
-  const parentScore = (unit, ranks) => {
-    const parents = [...unit.parentUnits];
-    if (!parents.length) return ranks.get(unit.id);
-    return parents.reduce((sum, parent) => {
-      const branchOffset = (branchPosition(parent, unit) - (parent.people.length - 1) / 2) * .08;
-      return sum + (ranks.get(parent.id) ?? .5) + branchOffset;
-    }, 0) / parents.length;
+  const placed = new Set();
+  const place = (unit, left) => {
+    if (placed.has(unit.id)) return;
+    placed.add(unit.id);
+    unit.x = left + (unit.subtreeWidth - unit.width) / 2;
+    const descendantsWidth = unit.children.reduce((sum, child, index) => sum + child.subtreeWidth + (index ? childGap(unit.children[index - 1], child) : 0), 0);
+    let childLeft = left + (unit.subtreeWidth - descendantsWidth) / 2;
+    unit.children.forEach((child, index) => {
+      if (index) childLeft += childGap(unit.children[index - 1], child);
+      place(child, childLeft);
+      childLeft += child.subtreeWidth;
+    });
   };
-  const childScore = (unit, ranks) => {
-    const children = [...unit.childUnits];
-    if (!children.length) return ranks.get(unit.id);
-    return children.reduce((sum, child) => sum + (ranks.get(child.id) ?? .5), 0) / children.length;
-  };
-  const stableSort = (layer, scorer, ranks) => layer.sort((first, second) => scorer(first, ranks) - scorer(second, ranks) || first.order - second.order);
-  const ascendingGenerations = generations.slice().reverse();
-  for (let pass = 0; pass < 8; pass += 1) {
-    ascendingGenerations.slice(1).forEach((generation) => stableSort(layers.get(generation), parentScore, makeRanks()));
-    generations.slice(1).forEach((generation) => stableSort(layers.get(generation), childScore, makeRanks()));
-  }
-  const finalRanks = makeRanks();
-  units.filter((unit) => unit.people.length === 2 && arePartners(unit.people[0], unit.people[1])).forEach((unit) => {
-    const ancestryRank = (person) => {
-      const parentUnits = [...new Set(person.parents.map((parentId) => unitByPersonId.get(parentId)).filter(Boolean))];
-      return parentUnits.length ? parentUnits.reduce((sum, parentUnit) => sum + (finalRanks.get(parentUnit.id) ?? .5), 0) / parentUnits.length : null;
-    };
-    const firstRank = ancestryRank(unit.people[0]);
-    const secondRank = ancestryRank(unit.people[1]);
-    if (firstRank !== null && secondRank !== null && firstRank > secondRank) unit.people.reverse();
+
+  const roots = units.filter((unit) => !unit.primaryParentId).sort((first, second) => first.order - second.order);
+  roots.forEach(measure);
+  let cursor = STAGE_PADDING;
+  roots.forEach((root) => {
+    place(root, cursor);
+    cursor += root.subtreeWidth + ROOT_FAMILY_GAP;
   });
-
-  const sharesKey = (first, second) => [...first.parentFamilyKeys].some((key) => second.parentFamilyKeys.has(key));
-  const sharesParentUnit = (first, second) => [...first.parentUnits].some((parent) => second.parentUnits.has(parent));
-  const gapBetween = (first, second) => sharesKey(first, second) ? SIBLING_GAP : sharesParentUnit(first, second) ? RELATED_FAMILY_GAP : UNRELATED_FAMILY_GAP;
-  const layerWidth = (layer) => layer.reduce((sum, unit, index) => sum + unit.width + (index ? gapBetween(layer[index - 1], unit) : 0), 0);
-  const width = Math.max(940, ...generations.map((generation) => layerWidth(layers.get(generation)) + STAGE_PADDING * 2));
-
-  layers.forEach((layer) => {
-    let cursor = (width - layerWidth(layer)) / 2;
-    layer.forEach((unit, index) => {
-      if (index) cursor += gapBetween(layer[index - 1], unit);
-      unit.x = cursor;
-      cursor += unit.width;
-    });
+  units.filter((unit) => !placed.has(unit.id)).forEach((unit) => {
+    measure(unit);
+    place(unit, cursor);
+    cursor += unit.subtreeWidth + ROOT_FAMILY_GAP;
   });
-
-  const packLayer = (layer, desiredCenters) => {
-    if (!layer.length) return;
-    let cursor = STAGE_PADDING;
-    layer.forEach((unit, index) => {
-      if (index) cursor += gapBetween(layer[index - 1], unit);
-      const desiredLeft = (desiredCenters.get(unit.id) ?? (unit.x + unit.width / 2)) - unit.width / 2;
-      unit.x = Math.max(cursor, desiredLeft);
-      cursor = unit.x + unit.width;
-    });
-    const rightLimit = width - STAGE_PADDING;
-    const last = layer[layer.length - 1];
-    last.x = Math.min(last.x, rightLimit - last.width);
-    for (let index = layer.length - 2; index >= 0; index -= 1) {
-      const next = layer[index + 1];
-      layer[index].x = Math.min(layer[index].x, next.x - gapBetween(layer[index], next) - layer[index].width);
-    }
-    if (layer[0].x < STAGE_PADDING) {
-      const shift = STAGE_PADDING - layer[0].x;
-      layer.forEach((unit) => { unit.x += shift; });
-    }
-  };
-  const parentConnectionX = (parent, child) => parent.x + branchPosition(parent, child) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
-  for (let pass = 0; pass < 4; pass += 1) {
-    ascendingGenerations.slice(1).forEach((generation) => {
-      const layer = layers.get(generation);
-      const desired = new Map(layer.map((unit) => {
-        const parents = [...unit.parentUnits];
-        const center = parents.length ? parents.reduce((sum, parent) => sum + parentConnectionX(parent, unit), 0) / parents.length : unit.x + unit.width / 2;
-        return [unit.id, center];
-      }));
-      packLayer(layer, desired);
-    });
-    generations.slice(1).forEach((generation) => {
-      const layer = layers.get(generation);
-      const desired = new Map(layer.map((unit) => {
-        const children = [...unit.childUnits];
-        const center = children.length ? children.reduce((sum, child) => sum + child.x + child.width / 2, 0) / children.length : unit.x + unit.width / 2;
-        return [unit.id, center];
-      }));
-      packLayer(layer, desired);
-    });
-  }
   const height = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
-  return { units, width, height: Math.max(300, height) };
+  return { units, width: Math.max(940, cursor - ROOT_FAMILY_GAP + STAGE_PADDING), height: Math.max(300, height) };
 }
 
 function generationLabel(generation) {
