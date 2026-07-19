@@ -30,6 +30,63 @@ function years(person) {
   return `${person.birth || "?"} — ${person.death || ""}`;
 }
 
+function normalizePerson(person) {
+  const { occupation: _removedOccupation, ...clean } = person;
+  return {
+    ...clean,
+    parents: Array.isArray(clean.parents) ? clean.parents : [],
+    partnerId: clean.partnerId || "",
+    birthplace: clean.birthplace || "",
+    deathplace: clean.deathplace || "",
+    note: clean.note || "",
+    photo: clean.photo || "",
+    photoX: Number.isFinite(clean.photoX) ? clean.photoX : 50,
+    photoY: Number.isFinite(clean.photoY) ? clean.photoY : 50,
+    photoScale: Number.isFinite(clean.photoScale) ? clean.photoScale : 1,
+  };
+}
+
+function optimizePhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file?.type.startsWith("image/")) {
+      reject(new Error("Выберите изображение"));
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      reject(new Error("Фото должно быть меньше 12 МБ"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Не удалось прочитать фото"));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("Не удалось открыть фото"));
+      image.onload = () => {
+        const maxSide = 720;
+        const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#f7f5ef";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", .82));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function Portrait({ person, className }) {
+  return (
+    <span className={className} aria-hidden="true">
+      {person.photo ? <img className="portrait-image" src={person.photo} alt="" style={{ objectPosition: `${person.photoX ?? 50}% ${person.photoY ?? 50}%`, transform: `scale(${person.photoScale ?? 1})` }}/> : initials(person.name || "?")}
+    </span>
+  );
+}
+
 function PersonCard({ person, selected, onSelect, register }) {
   return (
     <button
@@ -39,7 +96,7 @@ function PersonCard({ person, selected, onSelect, register }) {
       type="button"
       aria-pressed={selected}
     >
-      <span className="avatar" aria-hidden="true">{initials(person.name)}</span>
+      <Portrait person={person} className="avatar"/>
       <span className="person-copy">
         <strong>{person.name}</strong>
         <span className="person-years">{years(person)}</span>
@@ -56,14 +113,14 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
     <aside className="detail-panel" aria-label={`Сведения: ${person.name}`}>
       <button className="icon-button detail-close" onClick={onClose} aria-label="Закрыть карточку"><Icon name="close" /></button>
       <div className="detail-heading">
-        <span className="detail-avatar">{initials(person.name)}</span>
+        <Portrait person={person} className="detail-avatar"/>
         <div><h2>{person.name}</h2><p>{years(person)}</p></div>
       </div>
       <section className="detail-section">
         <div className="section-title"><h3>О человеке</h3><button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button></div>
         <dl>
           <div><dt>Место рождения</dt><dd>{person.birthplace || "Не указано"}</dd></div>
-          <div><dt>Профессия</dt><dd>{person.occupation || "Не указана"}</dd></div>
+          <div><dt>Место смерти</dt><dd>{person.deathplace || "Не указано"}</dd></div>
           <div><dt>Примечание</dt><dd>{person.note || "Пока нет заметок"}</dd></div>
         </dl>
       </section>
@@ -86,11 +143,31 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
 
 function PersonEditor({ person, people, onSave, onClose }) {
   const isNew = !person;
-  const [form, setForm] = useState(person || {
+  const photoInputRef = useRef(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [form, setForm] = useState({
     name: "", birth: "", death: "", relation: "", generation: 0,
-    parents: [], partnerId: "", birthplace: "", occupation: "", note: "",
+    parents: [], partnerId: "", birthplace: "", deathplace: "", note: "",
+    photo: "", photoX: 50, photoY: 50, photoScale: 1,
+    ...(person ? normalizePerson(person) : {}),
   });
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const choosePhoto = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhotoBusy(true);
+    setPhotoError("");
+    try {
+      const photo = await optimizePhoto(file);
+      setForm((current) => ({ ...current, photo, photoX: 50, photoY: 50, photoScale: 1 }));
+    } catch (error) {
+      setPhotoError(error.message);
+    } finally {
+      setPhotoBusy(false);
+      event.target.value = "";
+    }
+  };
   const submit = (event) => {
     event.preventDefault();
     const parentIds = [event.currentTarget.elements.parentId1.value, event.currentTarget.elements.parentId2.value].filter((id, index, all) => id && all.indexOf(id) === index);
@@ -100,6 +177,24 @@ function PersonEditor({ person, people, onSave, onClose }) {
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <form className="editor" onSubmit={submit}>
         <div className="editor-header"><div><h2>{isNew ? "Добавить человека" : "Редактировать запись"}</h2><p>Заполните только то, что уже известно.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><Icon name="close" /></button></div>
+        <div className="photo-editor">
+          <Portrait person={{ ...form, name: form.name || "Фото" }} className="editor-photo-preview"/>
+          <div className="photo-editor-body">
+            <strong>Фотография</strong>
+            <p>Загрузите снимок, затем подгоните лицо внутри круга.</p>
+            <input ref={photoInputRef} className="visually-hidden" type="file" accept="image/*" onChange={choosePhoto}/>
+            <div className="photo-buttons">
+              <button type="button" className="button ghost compact" onClick={() => photoInputRef.current?.click()} disabled={photoBusy}>{photoBusy ? "Обрабатываем…" : form.photo ? "Заменить фото" : "Добавить фото"}</button>
+              {form.photo && <button type="button" className="bare-text-button" onClick={() => setForm((current) => ({ ...current, photo: "", photoX: 50, photoY: 50, photoScale: 1 }))}>Убрать</button>}
+            </div>
+            {photoError && <span className="field-error" role="alert">{photoError}</span>}
+            {form.photo && <div className="photo-controls">
+              <label>По горизонтали<input aria-label="Положение фото по горизонтали" type="range" min="0" max="100" value={form.photoX} onChange={(e) => update("photoX", Number(e.target.value))}/></label>
+              <label>По вертикали<input aria-label="Положение фото по вертикали" type="range" min="0" max="100" value={form.photoY} onChange={(e) => update("photoY", Number(e.target.value))}/></label>
+              <label>Масштаб<input aria-label="Масштаб фото" type="range" min="1" max="2" step="0.05" value={form.photoScale} onChange={(e) => update("photoScale", Number(e.target.value))}/></label>
+            </div>}
+          </div>
+        </div>
         <div className="form-grid">
           <label className="wide">Имя и фамилия<input name="name" value={form.name} onChange={(e) => update("name", e.target.value)} required autoFocus /></label>
           <label>Год рождения<input name="birth" inputMode="numeric" value={form.birth} onChange={(e) => update("birth", e.target.value)} /></label>
@@ -110,7 +205,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label>Второй родитель<select name="parentId2" defaultValue={form.parents?.[1] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="wide">Супруг или супруга<select value={form.partnerId || ""} onChange={(e) => update("partnerId", e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
-          <label className="wide">Профессия<input value={form.occupation} onChange={(e) => update("occupation", e.target.value)} /></label>
+          <label className="wide">Место смерти<input value={form.deathplace} onChange={(e) => update("deathplace", e.target.value)} /></label>
           <label className="wide">Заметка<textarea rows="3" value={form.note} onChange={(e) => update("note", e.target.value)} /></label>
         </div>
         <div className="editor-actions"><button type="button" className="button ghost" onClick={onClose}>Отмена</button><button className="button primary" type="submit">Сохранить</button></div>
@@ -182,7 +277,10 @@ function TreeConnections({ people, nodes, stage, scale }) {
 
 function App() {
   const [people, setPeople] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return Array.isArray(stored) ? stored.map(normalizePerson) : [];
+    } catch { return []; }
   });
   const [selectedId, setSelectedId] = useState(null);
   const [editor, setEditor] = useState(false);
@@ -196,7 +294,13 @@ function App() {
   const nodeRefs = useRef(new Map());
   const selected = people.find((person) => person.id === selectedId) || null;
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(people)); }, [people]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(people));
+    } catch {
+      setNotice("Хранилище браузера заполнено. Попробуйте фото меньшего размера.");
+    }
+  }, [people]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 2600);
@@ -210,19 +314,20 @@ function App() {
     if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior: "smooth" });
   };
   const savePerson = (draft) => {
+    const normalizedDraft = normalizePerson(draft);
     if (draft.id) {
       setPeople((current) => {
         const previous = current.find((person) => person.id === draft.id);
         return current.map((person) => {
-          if (person.id === draft.id) return draft;
-          if (person.id === previous?.partnerId && previous.partnerId !== draft.partnerId && person.partnerId === draft.id) return { ...person, partnerId: "" };
-          if (person.id === draft.partnerId) return { ...person, partnerId: draft.id };
+          if (person.id === normalizedDraft.id) return normalizedDraft;
+          if (person.id === previous?.partnerId && previous.partnerId !== normalizedDraft.partnerId && person.partnerId === normalizedDraft.id) return { ...person, partnerId: "" };
+          if (person.id === normalizedDraft.partnerId) return { ...person, partnerId: normalizedDraft.id };
           return person;
         });
       });
-      setSelectedId(draft.id);
+      setSelectedId(normalizedDraft.id);
     } else {
-      const created = { ...draft, id: `person-${Date.now()}`, partnerId: draft.partnerId || "" };
+      const created = { ...normalizedDraft, id: `person-${Date.now()}` };
       setPeople((current) => [...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id } : person), created]);
       setSelectedId(created.id);
     }

@@ -112,8 +112,9 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .person-card { width: 216px; height: 98px; border: 1px solid #c9c1ae; border-radius: 11px; background: rgba(255,254,250,.96); display: flex; align-items: center; padding: 12px; gap: 12px; text-align: left; cursor: pointer; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
 .person-card:hover { transform: translateY(-2px); border-color: #809070; box-shadow: 0 8px 20px rgba(46,52,39,.09); }
 .person-card.is-selected { border: 2px solid var(--terra); padding: 11px; box-shadow: 0 7px 20px rgba(183,91,56,.1); }
-.avatar, .detail-avatar { border-radius: 50%; display: grid; place-items: center; font-family: Georgia, serif; color: #f5f2e9; background: radial-gradient(circle at 35% 25%, #a7a89e, #50534c 66%, #30332e); filter: grayscale(1); border: 3px solid #e5dfd2; }
+.avatar, .detail-avatar, .editor-photo-preview { border-radius: 50%; display: grid; place-items: center; overflow: hidden; font-family: Georgia, serif; color: #f5f2e9; background: radial-gradient(circle at 35% 25%, #a7a89e, #50534c 66%, #30332e); border: 3px solid #e5dfd2; }
 .avatar { width: 65px; height: 65px; flex: 0 0 auto; font-size: 19px; letter-spacing: .03em; }
+.portrait-image { width: 100%; height: 100%; display: block; object-fit: cover; transform-origin: center; }
 .person-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .person-copy strong { font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .person-years { color: #555950; font-size: 13px; }
@@ -157,6 +158,20 @@ dd { margin: 0; }
 .editor-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 19px; border-bottom: 1px solid var(--line); }
 .editor-header h2 { margin: 0; font: 30px/1.15 Georgia, serif; font-weight: 400; }
 .editor-header p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+.photo-editor { display: grid; grid-template-columns: 118px 1fr; gap: 20px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.editor-photo-preview { width: 112px; height: 112px; font-size: 25px; flex: 0 0 auto; }
+.photo-editor-body { min-width: 0; }
+.photo-editor-body > strong { display: block; font-size: 13px; }
+.photo-editor-body > p { margin: 5px 0 11px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.photo-buttons { display: flex; align-items: center; gap: 12px; }
+.button.compact { min-height: 36px; padding: 0 13px; font-size: 12px; }
+.bare-text-button { border: 0; background: transparent; color: #9d3f2b; padding: 6px; font-size: 12px; cursor: pointer; }
+.bare-text-button:hover { text-decoration: underline; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.field-error { display: block; margin-top: 7px; color: #9d3f2b; font-size: 11px; }
+.photo-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; margin-top: 13px; }
+.photo-controls label { color: var(--muted); font-size: 10px; }
+.photo-controls input { display: block; width: 100%; margin-top: 5px; accent-color: var(--green); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 21px 0; }
 .form-grid label { display: flex; flex-direction: column; gap: 7px; color: #555950; font-size: 12px; font-weight: 650; }
 .form-grid .wide { grid-column: 1 / -1; }
@@ -206,7 +221,7 @@ dd { margin: 0; }
   .tree-board { height: calc(100% - 122px); padding-inline: 8px; }
   .tree-scaler, .tree-stage { min-width: 760px; }
   .tree-stage { height: 760px; }
-  .tree-row { gap: 18px; padding-left: 62px; }
+  .tree-row { justify-content: flex-start; gap: 18px; padding-left: 76px; }
   .mobile-generation-label { display: block; position: absolute; left: 10px; top: 38px; width: 58px; color: var(--muted); font-size: 10px; line-height: 1.25; }
   .person-card { width: 190px; height: 92px; }
   .empty-tree { inset: 84px auto auto 16px; width: 340px; margin: 0; }
@@ -220,6 +235,9 @@ dd { margin: 0; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
   .editor { padding: 20px; }
+  .photo-editor { grid-template-columns: 82px 1fr; gap: 14px; }
+  .editor-photo-preview { width: 78px; height: 78px; font-size: 18px; }
+  .photo-controls { grid-template-columns: 1fr; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
