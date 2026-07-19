@@ -335,17 +335,22 @@ function TreeConnections({ people, nodes, stage, scale }) {
         if (!rect) return null;
         return {
           x: (rect.left - base.left + rect.width / 2) / scale,
-          y: (side === "top" ? rect.top - base.top : rect.bottom - base.top) / scale,
+          y: (side === "top" ? rect.top - base.top : side === "center" ? rect.top - base.top + rect.height / 2 : rect.bottom - base.top) / scale,
         };
       };
       const next = [];
-      people.forEach((child) => child.parents.forEach((parentId) => {
-        const from = point(parentId, "top");
+      people.forEach((child) => {
+        const parentPoints = child.parents.map((parentId) => point(parentId, child.parents.length > 1 ? "center" : "top")).filter(Boolean);
+        if (!parentPoints.length) return;
+        const from = parentPoints.length > 1 ? {
+          x: parentPoints.reduce((sum, item) => sum + item.x, 0) / parentPoints.length,
+          y: parentPoints.reduce((sum, item) => sum + item.y, 0) / parentPoints.length,
+        } : parentPoints[0];
         const to = point(child.id, "bottom");
         if (!from || !to) return;
         const mid = from.y + (to.y - from.y) / 2;
-        next.push({ id: `${parentId}-${child.id}`, d: `M ${from.x} ${from.y} C ${from.x} ${mid}, ${to.x} ${mid}, ${to.x} ${to.y}`, partner: false });
-      }));
+        next.push({ id: `${child.parents.join("-")}-${child.id}`, d: `M ${from.x} ${from.y} V ${mid} H ${to.x} V ${to.y}` });
+      });
       setPaths(next);
     };
     const frame = requestAnimationFrame(draw);
