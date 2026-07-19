@@ -38,12 +38,35 @@ function normalizePerson(person) {
     partnerId: clean.partnerId || "",
     birthplace: clean.birthplace || "",
     deathplace: clean.deathplace || "",
+    maidenName: clean.maidenName || "",
     note: clean.note || "",
     photo: clean.photo || "",
     photoX: Number.isFinite(clean.photoX) ? clean.photoX : 50,
     photoY: Number.isFinite(clean.photoY) ? clean.photoY : 50,
     photoScale: Number.isFinite(clean.photoScale) ? clean.photoScale : 1,
   };
+}
+
+function normalizePeople(people) {
+  const normalized = people.map(normalizePerson);
+  const byId = new Map(normalized.map((person) => [person.id, person]));
+  normalized.forEach((person) => {
+    const partner = byId.get(person.partnerId);
+    if (!partner) {
+      person.partnerId = "";
+      return;
+    }
+    partner.partnerId = person.id;
+    partner.generation = person.generation;
+  });
+  return normalized;
+}
+
+function relationshipLabel(person, relative) {
+  if (relative.id === person.partnerId || relative.partnerId === person.id) return "Супруг / супруга";
+  if (person.parents.includes(relative.id)) return "Родитель";
+  if (relative.parents.includes(person.id)) return "Ребёнок";
+  return relative.relation || "Родственник";
 }
 
 function optimizePhoto(file) {
@@ -100,15 +123,41 @@ function PersonCard({ person, selected, onSelect, register }) {
       <span className="person-copy">
         <strong>{person.name}</strong>
         <span className="person-years">{years(person)}</span>
-        <small>{person.relation || "родственник"}</small>
+        <small>{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation || "родственник"].filter(Boolean).join(" · ")}</small>
       </span>
     </button>
   );
 }
 
+function GenerationPeople({ people, selectedId, onSelect, register }) {
+  const byId = new Map(people.map((person) => [person.id, person]));
+  const seen = new Set();
+  const units = [];
+
+  people.forEach((person) => {
+    if (seen.has(person.id)) return;
+    const partner = byId.get(person.partnerId) || people.find((item) => item.partnerId === person.id);
+    seen.add(person.id);
+    if (partner && !seen.has(partner.id)) {
+      seen.add(partner.id);
+      units.push([person, partner]);
+    } else {
+      units.push([person]);
+    }
+  });
+
+  return units.map((unit) => (
+    <div className={`family-unit ${unit.length === 2 ? "partner-pair" : "single-person"}`} key={unit.map((person) => person.id).sort().join("-")}>
+      <PersonCard person={unit[0]} selected={unit[0].id === selectedId} onSelect={onSelect} register={register}/>
+      {unit.length === 2 ? <><span className="partner-connector" role="img" aria-label="Супруги"><i/><i/></span><PersonCard person={unit[1]} selected={unit[1].id === selectedId} onSelect={onSelect} register={register}/></> : null}
+    </div>
+  ));
+}
+
 function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
   if (!person) return null;
-  const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || item.id === person.partnerId);
+  const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || item.id === person.partnerId || item.partnerId === person.id);
+  const generation = generationMeta.find((item) => item.id === person.generation);
   return (
     <aside className="detail-panel" aria-label={`Сведения: ${person.name}`}>
       <button className="icon-button detail-close" onClick={onClose} aria-label="Закрыть карточку"><Icon name="close" /></button>
@@ -119,8 +168,13 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
       <section className="detail-section">
         <div className="section-title"><h3>О человеке</h3><button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button></div>
         <dl>
+          <div><dt>Девичья фамилия</dt><dd>{person.maidenName || "Не указана"}</dd></div>
+          <div><dt>Год рождения</dt><dd>{person.birth || "Не указан"}</dd></div>
           <div><dt>Место рождения</dt><dd>{person.birthplace || "Не указано"}</dd></div>
+          <div><dt>Год смерти</dt><dd>{person.death || "Не указан"}</dd></div>
           <div><dt>Место смерти</dt><dd>{person.deathplace || "Не указано"}</dd></div>
+          <div><dt>Поколение</dt><dd>{generation?.label || "Не указано"}</dd></div>
+          <div><dt>Кем приходится</dt><dd>{person.relation || "Не указано"}</dd></div>
           <div><dt>Примечание</dt><dd>{person.note || "Пока нет заметок"}</dd></div>
         </dl>
       </section>
@@ -128,7 +182,7 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
         <div className="section-title"><h3>Родственные связи</h3></div>
         {related.length ? related.map((relative) => (
           <button key={relative.id} className="relation-row" onClick={() => onSelect(relative.id)}>
-            <span><strong>{relative.name}</strong><small>{years(relative)}</small></span><Icon name="chevron" size={17}/>
+            <span><em>{relationshipLabel(person, relative)}</em><strong>{relative.name}</strong><small>{years(relative)}</small></span><Icon name="chevron" size={17}/>
           </button>
         )) : <p className="empty-copy">Связи ещё не добавлены.</p>}
       </section>
@@ -148,7 +202,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
   const [photoError, setPhotoError] = useState("");
   const [form, setForm] = useState({
     name: "", birth: "", death: "", relation: "", generation: 0,
-    parents: [], partnerId: "", birthplace: "", deathplace: "", note: "",
+    parents: [], partnerId: "", birthplace: "", deathplace: "", maidenName: "", note: "",
     photo: "", photoX: 50, photoY: 50, photoScale: 1,
     ...(person ? normalizePerson(person) : {}),
   });
@@ -203,7 +257,8 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
           <label>Первый родитель<select name="parentId1" defaultValue={form.parents?.[0] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Второй родитель<select name="parentId2" defaultValue={form.parents?.[1] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label className="wide">Супруг или супруга<select value={form.partnerId || ""} onChange={(e) => update("partnerId", e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="wide">Супруг или супруга<select value={form.partnerId || ""} onChange={(e) => { const partnerId = e.target.value; const partner = people.find((item) => item.id === partnerId); setForm((current) => ({ ...current, partnerId, generation: partner?.generation ?? current.generation })); }}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
           <label className="wide">Место смерти<input value={form.deathplace} onChange={(e) => update("deathplace", e.target.value)} /></label>
           <label className="wide">Заметка<textarea rows="3" value={form.note} onChange={(e) => update("note", e.target.value)} /></label>
@@ -253,16 +308,6 @@ function TreeConnections({ people, nodes, stage, scale }) {
         const mid = from.y + (to.y - from.y) / 2;
         next.push({ id: `${parentId}-${child.id}`, d: `M ${from.x} ${from.y} C ${from.x} ${mid}, ${to.x} ${mid}, ${to.x} ${to.y}`, partner: false });
       }));
-      people.forEach((person) => {
-        if (!person.partnerId || person.id > person.partnerId) return;
-        const a = point(person.id, "top");
-        const b = point(person.partnerId, "top");
-        const aNode = nodes.current.get(person.id)?.getBoundingClientRect();
-        const bNode = nodes.current.get(person.partnerId)?.getBoundingClientRect();
-        if (!a || !b || !aNode || !bNode) return;
-        const y = ((aNode.top - base.top) + aNode.height / 2) / scale;
-        next.push({ id: `partner-${person.id}`, d: `M ${a.x} ${y} L ${b.x} ${y}`, partner: true });
-      });
       setPaths(next);
     };
     const frame = requestAnimationFrame(draw);
@@ -272,14 +317,14 @@ function TreeConnections({ people, nodes, stage, scale }) {
     window.addEventListener("resize", draw);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener("resize", draw); };
   }, [people, nodes, stage, scale]);
-  return <svg className="connections" aria-hidden="true">{paths.map((path) => <path key={path.id} d={path.d} className={path.partner ? "partner-line" : "parent-line"} />)}</svg>;
+  return <svg className="connections" aria-hidden="true">{paths.map((path) => <path key={path.id} d={path.d} className="parent-line" />)}</svg>;
 }
 
 function App() {
   const [people, setPeople] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      return Array.isArray(stored) ? stored.map(normalizePerson) : [];
+      return Array.isArray(stored) ? normalizePeople(stored) : [];
     } catch { return []; }
   });
   const [selectedId, setSelectedId] = useState(null);
@@ -321,14 +366,14 @@ function App() {
         return current.map((person) => {
           if (person.id === normalizedDraft.id) return normalizedDraft;
           if (person.id === previous?.partnerId && previous.partnerId !== normalizedDraft.partnerId && person.partnerId === normalizedDraft.id) return { ...person, partnerId: "" };
-          if (person.id === normalizedDraft.partnerId) return { ...person, partnerId: normalizedDraft.id };
+          if (person.id === normalizedDraft.partnerId) return { ...person, partnerId: normalizedDraft.id, generation: normalizedDraft.generation };
           return person;
         });
       });
       setSelectedId(normalizedDraft.id);
     } else {
       const created = { ...normalizedDraft, id: `person-${Date.now()}` };
-      setPeople((current) => [...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id } : person), created]);
+      setPeople((current) => [...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id, generation: created.generation } : person), created]);
       setSelectedId(created.id);
     }
     setEditor(false);
@@ -398,7 +443,7 @@ function App() {
                 {generationMeta.map((generation) => (
                   <div className={`tree-row generation-${generation.id}`} key={generation.id}>
                     <span className="mobile-generation-label">{generation.label}</span>
-                    {visiblePeople.filter((person) => person.generation === generation.id).map((person) => <PersonCard key={person.id} person={person} selected={person.id === selectedId} onSelect={setSelectedId} register={register}/>) }
+                    <GenerationPeople people={visiblePeople.filter((person) => person.generation === generation.id)} selectedId={selectedId} onSelect={setSelectedId} register={register}/>
                   </div>
                 ))}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
