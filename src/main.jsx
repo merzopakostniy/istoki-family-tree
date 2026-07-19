@@ -39,6 +39,7 @@ function normalizePerson(person) {
   const partnerIds = Array.isArray(clean.partnerIds) ? clean.partnerIds : legacyPartnerId ? [legacyPartnerId] : [];
   return {
     ...clean,
+    generation: Number.isFinite(clean.generation) ? Math.max(0, Math.round(clean.generation)) : 0,
     parents: Array.isArray(clean.parents) ? clean.parents : [],
     partnerIds: [...new Set(partnerIds.filter(Boolean))],
     birthplace: clean.birthplace || "",
@@ -63,12 +64,14 @@ function normalizePeople(people) {
       if (!partner.partnerIds.includes(person.id)) partner.partnerIds.push(person.id);
     });
   });
-  for (let pass = 0; pass < generationMeta.length; pass += 1) {
+  const maxPasses = Math.min(normalized.length + 2, 64);
+  for (let pass = 0; pass < maxPasses; pass += 1) {
     normalized.forEach((person) => {
       const parentGenerations = person.parents.map((id) => byId.get(id)?.generation).filter(Number.isFinite);
       if (parentGenerations.length) {
         const highestParent = Math.max(...parentGenerations);
-        if (!person.manualGeneration && person.generation <= highestParent) person.generation = Math.min(3, highestParent + 1);
+        const requiredGeneration = highestParent + 1;
+        if (!person.manualGeneration || person.generation <= highestParent) person.generation = requiredGeneration;
       }
       person.partnerIds.forEach((partnerId) => {
         const partner = byId.get(partnerId);
@@ -183,27 +186,32 @@ const PARTNER_CONNECTOR_WIDTH = 42;
 const FAMILY_GAP = 94;
 const ROOT_FAMILY_GAP = 128;
 const STAGE_PADDING = 88;
-const STAGE_HEIGHT = 770;
-const GENERATION_TOP = { 3: 28, 2: 218, 1: 408, 0: 598 };
+const EMPTY_STAGE_HEIGHT = 770;
+const STAGE_TOP = 28;
+const STAGE_BOTTOM = 54;
+const GENERATION_GAP = 190;
 
 function familyUnitWidth(people) {
   return people.length * CARD_WIDTH + Math.max(0, people.length - 1) * PARTNER_CONNECTOR_WIDTH;
 }
 
 function buildFamilyLayout(people) {
-  if (!people.length) return { units: [], width: 940, height: STAGE_HEIGHT };
+  if (!people.length) return { units: [], width: 940, height: EMPTY_STAGE_HEIGHT };
   const sourceOrder = new Map(people.map((person, index) => [person.id, index]));
-  const units = generationMeta.flatMap((generation) => groupPartnerUnits(people.filter((person) => person.generation === generation.id)).map((members) => ({
+  const generations = [...new Set(people.map((person) => person.generation))].sort((first, second) => second - first);
+  const highestGeneration = generations[0];
+  const lowestGeneration = generations[generations.length - 1];
+  const units = generations.flatMap((generation) => groupPartnerUnits(people.filter((person) => person.generation === generation)).map((members) => ({
     id: members.map((person) => person.id).sort().join("--"),
     people: members,
-    generation: generation.id,
+    generation,
     width: familyUnitWidth(members),
     order: Math.min(...members.map((person) => sourceOrder.get(person.id) ?? 0)),
     children: [],
     primaryParentId: null,
     subtreeWidth: 0,
     x: 0,
-    y: GENERATION_TOP[generation.id] ?? 0,
+    y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
   })));
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const unitByPersonId = new Map();
@@ -271,7 +279,12 @@ function buildFamilyLayout(people) {
     place(unit, cursor);
     cursor += unit.subtreeWidth + ROOT_FAMILY_GAP;
   });
-  return { units, width: Math.max(940, cursor - ROOT_FAMILY_GAP + STAGE_PADDING), height: STAGE_HEIGHT };
+  const height = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
+  return { units, width: Math.max(940, cursor - ROOT_FAMILY_GAP + STAGE_PADDING), height: Math.max(300, height) };
+}
+
+function generationLabel(generation) {
+  return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
 }
 
 function FamilyUnit({ unit, selectedId, onSelect, register }) {
@@ -313,7 +326,6 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
 function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMove }) {
   if (!person) return null;
   const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || person.partnerIds.includes(item.id) || item.partnerIds.includes(person.id));
-  const generation = generationMeta.find((item) => item.id === person.generation);
   return (
     <aside className="detail-panel" aria-label={`Сведения: ${person.name}`}>
       <button className="icon-button detail-close" onClick={onClose} aria-label="Закрыть карточку"><Icon name="close" /></button>
@@ -329,7 +341,7 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMo
           <div><dt>Место рождения</dt><dd>{person.birthplace || "Не указано"}</dd></div>
           <div><dt>Год смерти</dt><dd>{person.death || "Не указан"}</dd></div>
           <div><dt>Место смерти</dt><dd>{person.deathplace || "Не указано"}</dd></div>
-          <div><dt>Поколение</dt><dd>{generation?.label || "Не указано"}</dd></div>
+          <div><dt>Поколение</dt><dd>{generationLabel(person.generation)}</dd></div>
           <div><dt>Кем приходится</dt><dd>{person.relation || "Не указано"}</dd></div>
           <div><dt>Примечание</dt><dd>{person.note || "Пока нет заметок"}</dd></div>
         </dl>
@@ -372,6 +384,8 @@ function PersonEditor({ person, people, onSave, onClose }) {
     photo: "", photoX: 50, photoY: 50, photoScale: 1,
     ...(person ? normalizePerson(person) : {}),
   });
+  const highestGeneration = Math.max(3, form.generation, ...people.map((item) => item.generation));
+  const generationOptions = Array.from({ length: highestGeneration + 2 }, (_, generation) => generation).reverse();
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const choosePhoto = async (event) => {
     const file = event.target.files?.[0];
@@ -394,7 +408,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
       parents[index] = parentId;
       const uniqueParents = parents.filter((id, itemIndex, all) => id && all.indexOf(id) === itemIndex);
       const parentGenerations = uniqueParents.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
-      const generation = parentGenerations.length ? Math.min(3, Math.max(...parentGenerations) + 1) : current.generation;
+      const generation = parentGenerations.length ? Math.max(...parentGenerations) + 1 : current.generation;
       return { ...current, parents: uniqueParents, generation, manualGeneration: false };
     });
   };
@@ -435,7 +449,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label className="wide">Имя и фамилия<input name="name" value={form.name} onChange={(e) => update("name", e.target.value)} required autoFocus /></label>
           <label>Год рождения<input name="birth" inputMode="numeric" value={form.birth} onChange={(e) => update("birth", e.target.value)} /></label>
           <label>Год смерти<input name="death" inputMode="numeric" value={form.death} onChange={(e) => update("death", e.target.value)} /></label>
-          <label>Поколение<select value={form.generation} onChange={(e) => setForm((current) => ({ ...current, generation: Number(e.target.value), manualGeneration: true }))}>{generationMeta.slice().reverse().map((gen) => <option value={gen.id} key={gen.id}>{gen.label}</option>)}</select></label>
+          <label>Поколение<select value={form.generation} onChange={(e) => setForm((current) => ({ ...current, generation: Number(e.target.value), manualGeneration: true }))}>{generationOptions.map((generation) => <option value={generation} key={generation}>{generationLabel(generation)}</option>)}</select></label>
           <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
           <label>Первый родитель<select name="parentId1" value={form.parents?.[0] || ""} onChange={(e) => chooseParent(0, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Второй родитель<select name="parentId2" value={form.parents?.[1] || ""} onChange={(e) => chooseParent(1, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -593,7 +607,9 @@ function App() {
   const fitTree = () => {
     const board = boardRef.current;
     if (!board) return;
-    const fittedScale = Math.max(.4, Math.min(1, (board.clientWidth - 40) / stageWidth));
+    const widthScale = (board.clientWidth - 40) / stageWidth;
+    const heightScale = (board.clientHeight - 40) / familyLayout.height;
+    const fittedScale = Math.max(.25, Math.min(1, widthScale, heightScale));
     setScale(+fittedScale.toFixed(2));
   };
   useEffect(() => {
@@ -653,7 +669,7 @@ function App() {
 
       if (direction === "up" || direction === "down") {
         const step = direction === "up" ? 1 : -1;
-        const generation = Math.max(0, Math.min(3, person.generation + step));
+        const generation = Math.max(0, person.generation + step);
         if (generation === person.generation) return current;
         return current.map((item) => familyIds.has(item.id) ? { ...item, generation, manualGeneration: true } : item);
       }
@@ -707,7 +723,7 @@ function App() {
           <div className="canvas-heading">
             <div><h1>Семейное древо</h1><p>Начните с самых дальних известных предков</p></div>
             <div className="zoom-controls" aria-label="Масштаб">
-              <button onClick={() => setScale((value) => Math.max(.4, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
+              <button onClick={() => setScale((value) => Math.max(.25, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
               <output>{Math.round(scale * 100)}%</output>
               <button onClick={() => setScale((value) => Math.min(1.25, +(value + .1).toFixed(2)))} aria-label="Увеличить">+</button>
               <button className="center-button" onClick={fitTree}><Icon name="target" size={18}/>Вместить древо</button>
