@@ -1,0 +1,76 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Public collection: trees/main/people/{personId}
+// Each document is a public genealogy record. It contains no account email,
+// role, token, billing information, or other private user-profile fields.
+// Required fields:
+// id, name, birth, death, relation, generation, parents, partnerIds,
+// birthplace, deathplace, maidenName, manualGeneration, note, photo,
+// photoX, photoY, photoScale.
+//
+// Visitors may read the public tree. Only the verified owner Google account
+// may create, update, or delete records.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTreeOwner() {
+      return isAuthenticated() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email == 'merzopakostniy@gmail.com';
+    }
+
+    function validString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function isValidPerson(data, personId) {
+      return data.keys().hasAll([
+          'id', 'name', 'birth', 'death', 'relation', 'generation',
+          'parents', 'partnerIds', 'birthplace', 'deathplace', 'maidenName',
+          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'birth', 'death', 'relation', 'generation',
+          'parents', 'partnerIds', 'birthplace', 'deathplace', 'maidenName',
+          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale'
+        ]) &&
+        data.id is string && data.id == personId && data.id.size() > 0 && data.id.size() <= 160 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 240 &&
+        validString(data.birth, 40) &&
+        validString(data.death, 40) &&
+        validString(data.relation, 160) &&
+        data.generation is int && data.generation >= 0 && data.generation <= 1000 &&
+        data.parents is list && data.parents.size() <= 16 &&
+        data.partnerIds is list && data.partnerIds.size() <= 16 &&
+        validString(data.birthplace, 240) &&
+        validString(data.deathplace, 240) &&
+        validString(data.maidenName, 240) &&
+        data.manualGeneration is bool &&
+        validString(data.note, 4000) &&
+        validString(data.photo, 900000) &&
+        data.photoX is number && data.photoX >= 0 && data.photoX <= 100 &&
+        data.photoY is number && data.photoY >= 0 && data.photoY <= 100 &&
+        data.photoScale is number && data.photoScale >= 1 && data.photoScale <= 2;
+    }
+
+    match /trees/main/people/{personId} {
+      allow read: if true;
+      allow create: if isTreeOwner() && isValidPerson(request.resource.data, personId);
+      allow update: if isTreeOwner() && isValidPerson(request.resource.data, personId);
+      allow delete: if isTreeOwner();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

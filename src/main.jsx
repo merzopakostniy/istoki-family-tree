@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { onAuthStateChanged } from "firebase/auth";
 import { generationMeta } from "./data";
+import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPeople } from "./firebase";
 import "./styles.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
@@ -22,6 +24,7 @@ function Icon({ name, size = 20 }) {
     arrowRight: <path d="m9.5 6 6 6-6 6M15 12H5"/>,
     arrowUp: <path d="m6 14.5 6-6 6 6M12 9v10"/>,
     arrowDown: <path d="m6 9.5 6 6 6-6M12 15V5"/>,
+    cloud: <><path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.4-1.7A4.8 4.8 0 0 0 7 18Z"/><path d="m9 13 2 2 4-4"/></>,
   };
   return <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -38,7 +41,11 @@ function normalizePerson(person) {
   const { occupation: _removedOccupation, partnerId: legacyPartnerId, ...clean } = person;
   const partnerIds = Array.isArray(clean.partnerIds) ? clean.partnerIds : legacyPartnerId ? [legacyPartnerId] : [];
   return {
-    ...clean,
+    id: clean.id || "",
+    name: clean.name || "",
+    birth: clean.birth || "",
+    death: clean.death || "",
+    relation: clean.relation || "",
     generation: Number.isFinite(clean.generation) ? Math.max(0, Math.round(clean.generation)) : 0,
     parents: Array.isArray(clean.parents) ? clean.parents : [],
     partnerIds: [...new Set(partnerIds.filter(Boolean))],
@@ -136,7 +143,7 @@ function optimizePhoto(file) {
       const image = new Image();
       image.onerror = () => reject(new Error("Не удалось открыть фото"));
       image.onload = () => {
-        const maxSide = 720;
+        const maxSide = 640;
         const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
@@ -145,7 +152,7 @@ function optimizePhoto(file) {
         context.fillStyle = "#f7f5ef";
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", .82));
+        resolve(canvas.toDataURL("image/jpeg", .76));
       };
       image.src = reader.result;
     };
@@ -347,7 +354,7 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
   );
 }
 
-function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMove }) {
+function DetailPanel({ person, people, canEdit, onClose, onEdit, onDelete, onSelect, onMove }) {
   if (!person) return null;
   const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || person.partnerIds.includes(item.id) || item.partnerIds.includes(person.id));
   return (
@@ -358,7 +365,7 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMo
         <div><h2>{person.name}</h2><p>{years(person)}</p></div>
       </div>
       <section className="detail-section">
-        <div className="section-title"><h3>О человеке</h3><button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button></div>
+        <div className="section-title"><h3>О человеке</h3>{canEdit && <button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button>}</div>
         <dl>
           <div><dt>Девичья фамилия</dt><dd>{person.maidenName || "Не указана"}</dd></div>
           <div><dt>Год рождения</dt><dd>{person.birth || "Не указан"}</dd></div>
@@ -378,7 +385,7 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMo
           </button>
         )) : <p className="empty-copy">Связи ещё не добавлены.</p>}
       </section>
-      <section className="placement-section">
+      {canEdit && <section className="placement-section">
         <div className="section-title"><h3>Расположение карточки</h3></div>
         <p>Супруги перемещаются вместе.</p>
         <div className="placement-controls">
@@ -387,12 +394,12 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMo
           <button onClick={() => onMove("up")}><Icon name="arrowUp" size={17}/>Выше</button>
           <button onClick={() => onMove("down")}><Icon name="arrowDown" size={17}/>Ниже</button>
         </div>
-      </section>
+      </section>}
       <div className="detail-actions">
-        <button className="button secondary" onClick={onEdit}><Icon name="edit" size={18}/>Редактировать</button>
+        {canEdit && <button className="button secondary" onClick={onEdit}><Icon name="edit" size={18}/>Редактировать</button>}
         <button className="button ghost" onClick={onClose}>Закрыть</button>
       </div>
-      <button className="delete-action" onClick={onDelete}><Icon name="trash" size={17}/>Удалить человека</button>
+      {canEdit && <button className="delete-action" onClick={onDelete}><Icon name="trash" size={17}/>Удалить человека</button>}
     </aside>
   );
 }
@@ -618,12 +625,18 @@ function TreeConnections({ people, nodes, stage, scale }) {
 }
 
 function App() {
-  const [people, setPeople] = useState(() => {
+  const initialLocalPeople = useRef(null);
+  if (initialLocalPeople.current === null) {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      return Array.isArray(stored) ? normalizePeople(stored) : [];
-    } catch { return []; }
-  });
+      initialLocalPeople.current = Array.isArray(stored) ? normalizePeople(stored) : [];
+    } catch { initialLocalPeople.current = []; }
+  }
+  const [people, setPeople] = useState(initialLocalPeople.current);
+  const peopleRef = useRef(initialLocalPeople.current);
+  const migrationStarted = useRef(false);
+  const [authUser, setAuthUser] = useState(null);
+  const [cloudState, setCloudState] = useState("loading");
   const [selectedId, setSelectedId] = useState(null);
   const [editor, setEditor] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
@@ -635,6 +648,34 @@ function App() {
   const boardRef = useRef(null);
   const nodeRefs = useRef(new Map());
   const selected = people.find((person) => person.id === selectedId) || null;
+  const ownerSignedIn = isOwnerUser(authUser);
+  const migrationNeeded = cloudState === "empty" && initialLocalPeople.current.length > 0;
+  const canManage = ownerSignedIn && cloudState !== "loading" && cloudState !== "error" && !migrationNeeded;
+
+  useEffect(() => onAuthStateChanged(auth, setAuthUser), []);
+  useEffect(() => subscribeToPeople((cloudPeople) => {
+    if (!cloudPeople.length) {
+      setCloudState("empty");
+      return;
+    }
+    const normalized = normalizePeople(cloudPeople);
+    peopleRef.current = normalized;
+    setPeople(normalized);
+    setCloudState("ready");
+  }, () => {
+    setCloudState("error");
+    setNotice("Не удалось подключиться к общему древу");
+  }), []);
+  useEffect(() => {
+    if (!ownerSignedIn || !migrationNeeded || migrationStarted.current) return;
+    migrationStarted.current = true;
+    syncPeople([], initialLocalPeople.current)
+      .then(() => setNotice("Текущее древо перенесено в Firebase"))
+      .catch((error) => {
+        migrationStarted.current = false;
+        setNotice(error.message || "Не удалось перенести древо в Firebase");
+      });
+  }, [ownerSignedIn, migrationNeeded]);
 
   useEffect(() => {
     try {
@@ -648,6 +689,43 @@ function App() {
     const timer = setTimeout(() => setNotice(""), 2600);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  const commitPeople = (createNext, successMessage) => {
+    if (!canManage) {
+      setNotice(ownerSignedIn ? "Дождитесь окончания синхронизации" : "Войдите как владелец");
+      return peopleRef.current;
+    }
+    const previous = peopleRef.current;
+    const next = normalizePeople(typeof createNext === "function" ? createNext(previous) : createNext);
+    peopleRef.current = next;
+    setPeople(next);
+    syncPeople(previous, next)
+      .then(() => setNotice(successMessage))
+      .catch((error) => {
+        peopleRef.current = previous;
+        setPeople(previous);
+        setNotice(error.message || "Изменения не сохранились");
+      });
+    return next;
+  };
+  const handleOwnerAccess = async () => {
+    try {
+      if (ownerSignedIn) {
+        await signOutOwner();
+        setNotice("Режим редактирования выключен");
+        return;
+      }
+      const result = await signInOwner();
+      if (!isOwnerUser(result.user)) {
+        await signOutOwner();
+        setNotice("Редактирование доступно только владельцу древа");
+      } else {
+        setNotice("Вход выполнен. Древо синхронизируется");
+      }
+    } catch (error) {
+      if (error?.code !== "auth/popup-closed-by-user") setNotice("Не удалось войти через Google");
+    }
+  };
 
   const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
   const familyLayout = buildFamilyLayout(visiblePeople);
@@ -686,28 +764,27 @@ function App() {
   const savePerson = (draft) => {
     const normalizedDraft = normalizePerson(draft);
     if (draft.id) {
-      setPeople((current) => {
+      commitPeople((current) => {
         const previous = current.find((person) => person.id === draft.id);
-        return normalizePeople(current.map((person) => {
+        return current.map((person) => {
           if (person.id === normalizedDraft.id) return normalizedDraft;
           const wasPartner = previous?.partnerIds.includes(person.id);
           const isPartner = normalizedDraft.partnerIds.includes(person.id);
           if (isPartner) return { ...person, partnerIds: [...new Set([...person.partnerIds, normalizedDraft.id])], generation: normalizedDraft.generation };
           if (wasPartner) return { ...person, partnerIds: person.partnerIds.filter((id) => id !== normalizedDraft.id) };
           return person;
-        }));
-      });
+        });
+      }, "Запись сохранена в общем древе");
       setSelectedId(normalizedDraft.id);
     } else {
       const created = { ...normalizedDraft, id: `person-${Date.now()}` };
-      setPeople((current) => normalizePeople([...current.map((person) => created.partnerIds.includes(person.id) ? { ...person, partnerIds: [...new Set([...person.partnerIds, created.id])], generation: created.generation } : person), created]));
+      commitPeople((current) => [...current.map((person) => created.partnerIds.includes(person.id) ? { ...person, partnerIds: [...new Set([...person.partnerIds, created.id])], generation: created.generation } : person), created], "Человек добавлен в общее древо");
       setSelectedId(created.id);
     }
     setEditor(false);
-    setNotice("Запись сохранена в этом браузере");
   };
   const movePerson = (id, direction) => {
-    setPeople((current) => {
+    commitPeople((current) => {
       const person = current.find((item) => item.id === id);
       if (!person) return current;
       const byId = new Map(current.map((item) => [item.id, item]));
@@ -736,22 +813,20 @@ function App() {
       const reordered = units.flat();
       let rowIndex = 0;
       return current.map((item) => item.generation === person.generation ? reordered[rowIndex++] : item);
-    });
-    setNotice("Расположение карточки изменено");
+    }, "Расположение карточки изменено");
   };
   const deletePerson = () => {
     if (!deleteCandidate) return;
     const id = deleteCandidate.id;
-    setPeople((current) => current
+    commitPeople((current) => current
       .filter((person) => person.id !== id)
       .map((person) => ({
         ...person,
         parents: person.parents.filter((parentId) => parentId !== id),
         partnerIds: person.partnerIds.filter((partnerId) => partnerId !== id),
-      })));
+      })), "Человек удалён из общего древа");
     setSelectedId(null);
     setDeleteCandidate(null);
-    setNotice("Человек удалён из древа");
   };
 
   return (
@@ -765,9 +840,9 @@ function App() {
         </nav>
         <div className="header-actions">
           {searchOpen && <input className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Найти человека" aria-label="Найти человека" autoFocus />}
-          <button className="button primary add-button" onClick={() => setEditor("new")}><Icon name="plus"/><span>Добавить человека</span></button>
+          {canManage && <button className="button primary add-button" onClick={() => setEditor("new")}><Icon name="plus"/><span>Добавить человека</span></button>}
           <button className="icon-button" onClick={() => { setSearchOpen((open) => !open); setQuery(""); }} aria-label="Поиск"><Icon name={searchOpen ? "close" : "search"}/></button>
-          <button className="icon-button settings-button" onClick={() => setNotice("Настройки приватности добавим перед реальными данными")} aria-label="Настройки"><Icon name="settings"/></button>
+          <button className={`cloud-login-button ${ownerSignedIn ? "is-owner" : ""}`} onClick={handleOwnerAccess} title={ownerSignedIn ? "Выйти из режима редактирования" : "Войти владельцу"}><Icon name="cloud" size={18}/><span>{ownerSignedIn ? cloudState === "ready" ? "Общее древо" : "Синхронизация…" : "Войти"}</span></button>
         </div>
       </header>
 
@@ -791,7 +866,7 @@ function App() {
                     <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
                     <h2>Начните с корней</h2>
                     <p>Добавьте самого дальнего известного предка. От него постепенно вырастут ветви вашей семьи.</p>
-                    <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button>
+                    {canManage ? <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button> : <button className="button ghost" onClick={handleOwnerAccess}><Icon name="cloud"/>Войти владельцу</button>}
                   </div>
                 ) : <>
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale}/>
@@ -803,7 +878,7 @@ function App() {
           </div>
         </section>
 
-        <DetailPanel person={selected} people={people} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId} onMove={(direction) => movePerson(selected.id, direction)}/>
+        <DetailPanel person={selected} people={people} canEdit={canManage} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId} onMove={(direction) => movePerson(selected.id, direction)}/>
       </main>
       {editor && <PersonEditor person={editor === "new" ? null : editor} people={people} onSave={savePerson} onClose={() => setEditor(false)}/>}
       {deleteCandidate && <ConfirmDelete person={deleteCandidate} onConfirm={deletePerson} onClose={() => setDeleteCandidate(null)}/>}

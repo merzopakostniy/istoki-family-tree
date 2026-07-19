@@ -78,6 +78,9 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .button.danger { background: #9d3f2b; color: white; }
 .button.danger:hover { background: #813321; }
 .add-button { min-height: 50px; padding: 0 22px; font-size: 15px; }
+.cloud-login-button { min-height: 42px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.cloud-login-button:hover { border-color: #8b9a7d; background: #f0f2eb; color: var(--green); }
+.cloud-login-button.is-owner { border-color: #8b9a7d; color: var(--green); background: #eef2e9; }
 
 .workspace { height: calc(100vh - 86px); position: relative; }
 
@@ -170,6 +173,7 @@ dd { margin: 0; }
 .placement-controls button { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: transparent; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; font-weight: 650; cursor: pointer; }
 .placement-controls button:hover { border-color: #8b9a7d; background: #f0f2eb; color: var(--green); }
 .detail-actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; padding-top: 22px; }
+.detail-actions > :only-child { grid-column: 1 / -1; }
 .delete-action { width: 100%; margin-top: 13px; padding: 11px; border: 0; border-radius: 8px; background: transparent; color: #9d3f2b; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; cursor: pointer; }
 .delete-action:hover { background: #fff1ec; }
 
@@ -253,6 +257,8 @@ dd { margin: 0; }
   .detail-heading { padding-top: 5px; }
   .detail-heading h2 { font-size: 27px; }
   .settings-button { display: none; }
+  .cloud-login-button span { display: none; }
+  .cloud-login-button { width: 42px; padding: 0; justify-content: center; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
   .spouse-options { grid-template-columns: 1fr; }
