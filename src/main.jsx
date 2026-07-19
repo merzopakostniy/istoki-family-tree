@@ -18,6 +18,10 @@ function Icon({ name, size = 20 }) {
     chevron: <path d="m9 6 6 6-6 6"/>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
+    arrowLeft: <path d="m14.5 6-6 6 6 6M9 12h10"/>,
+    arrowRight: <path d="m9.5 6 6 6-6 6M15 12H5"/>,
+    arrowUp: <path d="m6 14.5 6-6 6 6M12 9v10"/>,
+    arrowDown: <path d="m6 9.5 6 6 6-6M12 15V5"/>,
   };
   return <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -39,6 +43,7 @@ function normalizePerson(person) {
     birthplace: clean.birthplace || "",
     deathplace: clean.deathplace || "",
     maidenName: clean.maidenName || "",
+    manualGeneration: Boolean(clean.manualGeneration),
     note: clean.note || "",
     photo: clean.photo || "",
     photoX: Number.isFinite(clean.photoX) ? clean.photoX : 50,
@@ -57,9 +62,37 @@ function normalizePeople(people) {
       return;
     }
     partner.partnerId = person.id;
-    partner.generation = person.generation;
   });
+  for (let pass = 0; pass < generationMeta.length; pass += 1) {
+    normalized.forEach((person) => {
+      const parentGenerations = person.parents.map((id) => byId.get(id)?.generation).filter(Number.isFinite);
+      if (parentGenerations.length) {
+        const highestParent = Math.max(...parentGenerations);
+        if (!person.manualGeneration && person.generation <= highestParent) person.generation = Math.min(3, highestParent + 1);
+      }
+      const partner = byId.get(person.partnerId);
+      if (partner) person.generation = partner.generation = Math.max(person.generation, partner.generation);
+    });
+  }
   return normalized;
+}
+
+function groupPartnerUnits(people) {
+  const byId = new Map(people.map((person) => [person.id, person]));
+  const seen = new Set();
+  const units = [];
+  people.forEach((person) => {
+    if (seen.has(person.id)) return;
+    const partner = byId.get(person.partnerId) || people.find((item) => item.partnerId === person.id);
+    seen.add(person.id);
+    if (partner && !seen.has(partner.id)) {
+      seen.add(partner.id);
+      units.push([person, partner]);
+    } else {
+      units.push([person]);
+    }
+  });
+  return units;
 }
 
 function relationshipLabel(person, relative) {
@@ -130,21 +163,7 @@ function PersonCard({ person, selected, onSelect, register }) {
 }
 
 function GenerationPeople({ people, selectedId, onSelect, register }) {
-  const byId = new Map(people.map((person) => [person.id, person]));
-  const seen = new Set();
-  const units = [];
-
-  people.forEach((person) => {
-    if (seen.has(person.id)) return;
-    const partner = byId.get(person.partnerId) || people.find((item) => item.partnerId === person.id);
-    seen.add(person.id);
-    if (partner && !seen.has(partner.id)) {
-      seen.add(partner.id);
-      units.push([person, partner]);
-    } else {
-      units.push([person]);
-    }
-  });
+  const units = groupPartnerUnits(people);
 
   return units.map((unit) => (
     <div className={`family-unit ${unit.length === 2 ? "partner-pair" : "single-person"}`} key={unit.map((person) => person.id).sort().join("-")}>
@@ -154,7 +173,7 @@ function GenerationPeople({ people, selectedId, onSelect, register }) {
   ));
 }
 
-function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
+function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect, onMove }) {
   if (!person) return null;
   const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || item.id === person.partnerId || item.partnerId === person.id);
   const generation = generationMeta.find((item) => item.id === person.generation);
@@ -185,6 +204,16 @@ function DetailPanel({ person, people, onClose, onEdit, onDelete, onSelect }) {
             <span><em>{relationshipLabel(person, relative)}</em><strong>{relative.name}</strong><small>{years(relative)}</small></span><Icon name="chevron" size={17}/>
           </button>
         )) : <p className="empty-copy">Связи ещё не добавлены.</p>}
+      </section>
+      <section className="placement-section">
+        <div className="section-title"><h3>Расположение карточки</h3></div>
+        <p>Супруги перемещаются вместе.</p>
+        <div className="placement-controls">
+          <button onClick={() => onMove("left")}><Icon name="arrowLeft" size={17}/>Влево</button>
+          <button onClick={() => onMove("right")}>Вправо<Icon name="arrowRight" size={17}/></button>
+          <button onClick={() => onMove("up")}><Icon name="arrowUp" size={17}/>Выше</button>
+          <button onClick={() => onMove("down")}><Icon name="arrowDown" size={17}/>Ниже</button>
+        </div>
       </section>
       <div className="detail-actions">
         <button className="button secondary" onClick={onEdit}><Icon name="edit" size={18}/>Редактировать</button>
@@ -222,10 +251,19 @@ function PersonEditor({ person, people, onSave, onClose }) {
       event.target.value = "";
     }
   };
+  const chooseParent = (index, parentId) => {
+    setForm((current) => {
+      const parents = [...current.parents];
+      parents[index] = parentId;
+      const uniqueParents = parents.filter((id, itemIndex, all) => id && all.indexOf(id) === itemIndex);
+      const parentGenerations = uniqueParents.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
+      const generation = parentGenerations.length ? Math.min(3, Math.max(...parentGenerations) + 1) : current.generation;
+      return { ...current, parents: uniqueParents, generation, manualGeneration: false };
+    });
+  };
   const submit = (event) => {
     event.preventDefault();
-    const parentIds = [event.currentTarget.elements.parentId1.value, event.currentTarget.elements.parentId2.value].filter((id, index, all) => id && all.indexOf(id) === index);
-    onSave({ ...form, parents: parentIds });
+    onSave(form);
   };
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -235,7 +273,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <Portrait person={{ ...form, name: form.name || "Фото" }} className="editor-photo-preview"/>
           <div className="photo-editor-body">
             <strong>Фотография</strong>
-            <p>Загрузите снимок, затем подгоните лицо внутри круга.</p>
+            <p>Загрузите снимок, затем подгоните лицо внутри овала.</p>
             <input ref={photoInputRef} className="visually-hidden" type="file" accept="image/*" onChange={choosePhoto}/>
             <div className="photo-buttons">
               <button type="button" className="button ghost compact" onClick={() => photoInputRef.current?.click()} disabled={photoBusy}>{photoBusy ? "Обрабатываем…" : form.photo ? "Заменить фото" : "Добавить фото"}</button>
@@ -253,10 +291,10 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label className="wide">Имя и фамилия<input name="name" value={form.name} onChange={(e) => update("name", e.target.value)} required autoFocus /></label>
           <label>Год рождения<input name="birth" inputMode="numeric" value={form.birth} onChange={(e) => update("birth", e.target.value)} /></label>
           <label>Год смерти<input name="death" inputMode="numeric" value={form.death} onChange={(e) => update("death", e.target.value)} /></label>
-          <label>Поколение<select value={form.generation} onChange={(e) => update("generation", Number(e.target.value))}>{generationMeta.slice().reverse().map((gen) => <option value={gen.id} key={gen.id}>{gen.label}</option>)}</select></label>
+          <label>Поколение<select value={form.generation} onChange={(e) => setForm((current) => ({ ...current, generation: Number(e.target.value), manualGeneration: true }))}>{generationMeta.slice().reverse().map((gen) => <option value={gen.id} key={gen.id}>{gen.label}</option>)}</select></label>
           <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
-          <label>Первый родитель<select name="parentId1" defaultValue={form.parents?.[0] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Второй родитель<select name="parentId2" defaultValue={form.parents?.[1] || ""}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Первый родитель<select name="parentId1" value={form.parents?.[0] || ""} onChange={(e) => chooseParent(0, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Второй родитель<select name="parentId2" value={form.parents?.[1] || ""} onChange={(e) => chooseParent(1, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="wide">Супруг или супруга<select value={form.partnerId || ""} onChange={(e) => { const partnerId = e.target.value; const partner = people.find((item) => item.id === partnerId); setForm((current) => ({ ...current, partnerId, generation: partner?.generation ?? current.generation })); }}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
@@ -363,21 +401,47 @@ function App() {
     if (draft.id) {
       setPeople((current) => {
         const previous = current.find((person) => person.id === draft.id);
-        return current.map((person) => {
+        return normalizePeople(current.map((person) => {
           if (person.id === normalizedDraft.id) return normalizedDraft;
           if (person.id === previous?.partnerId && previous.partnerId !== normalizedDraft.partnerId && person.partnerId === normalizedDraft.id) return { ...person, partnerId: "" };
           if (person.id === normalizedDraft.partnerId) return { ...person, partnerId: normalizedDraft.id, generation: normalizedDraft.generation };
           return person;
-        });
+        }));
       });
       setSelectedId(normalizedDraft.id);
     } else {
       const created = { ...normalizedDraft, id: `person-${Date.now()}` };
-      setPeople((current) => [...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id, generation: created.generation } : person), created]);
+      setPeople((current) => normalizePeople([...current.map((person) => person.id === created.partnerId ? { ...person, partnerId: created.id, generation: created.generation } : person), created]));
       setSelectedId(created.id);
     }
     setEditor(false);
     setNotice("Запись сохранена в этом браузере");
+  };
+  const movePerson = (id, direction) => {
+    setPeople((current) => {
+      const person = current.find((item) => item.id === id);
+      if (!person) return current;
+      const partner = current.find((item) => item.id === person.partnerId || item.partnerId === person.id);
+      const familyIds = new Set([person.id, partner?.id].filter(Boolean));
+
+      if (direction === "up" || direction === "down") {
+        const step = direction === "up" ? 1 : -1;
+        const generation = Math.max(0, Math.min(3, person.generation + step));
+        if (generation === person.generation) return current;
+        return current.map((item) => familyIds.has(item.id) ? { ...item, generation, manualGeneration: true } : item);
+      }
+
+      const row = current.filter((item) => item.generation === person.generation);
+      const units = groupPartnerUnits(row);
+      const unitIndex = units.findIndex((unit) => unit.some((item) => familyIds.has(item.id)));
+      const nextIndex = direction === "left" ? unitIndex - 1 : unitIndex + 1;
+      if (unitIndex < 0 || nextIndex < 0 || nextIndex >= units.length) return current;
+      [units[unitIndex], units[nextIndex]] = [units[nextIndex], units[unitIndex]];
+      const reordered = units.flat();
+      let rowIndex = 0;
+      return current.map((item) => item.generation === person.generation ? reordered[rowIndex++] : item);
+    });
+    setNotice("Расположение карточки изменено");
   };
   const deletePerson = () => {
     if (!deleteCandidate) return;
@@ -453,7 +517,7 @@ function App() {
           </div>
         </section>
 
-        <DetailPanel person={selected} people={people} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId}/>
+        <DetailPanel person={selected} people={people} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId} onMove={(direction) => movePerson(selected.id, direction)}/>
       </main>
       {editor && <PersonEditor person={editor === "new" ? null : editor} people={people} onSave={savePerson} onClose={() => setEditor(false)}/>}
       {deleteCandidate && <ConfirmDelete person={deleteCandidate} onConfirm={deletePerson} onClose={() => setDeleteCandidate(null)}/>}
