@@ -396,11 +396,40 @@ function App() {
   }, [notice]);
 
   const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const stageWidth = Math.max(940, ...generationMeta.map((generation) => {
+    const units = groupPartnerUnits(visiblePeople.filter((person) => person.generation === generation.id));
+    const cardsWidth = units.reduce((sum, unit) => sum + (unit.length === 2 ? 558 : 258), 0);
+    return cardsWidth + Math.max(0, units.length - 1) * 52 + 160;
+  }));
   const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
-  const centerTree = () => {
+  const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
-    if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior: "smooth" });
+    if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior });
   };
+  const fitTree = () => {
+    const board = boardRef.current;
+    if (!board) return;
+    const fittedScale = Math.max(.4, Math.min(1, (board.clientWidth - 40) / stageWidth));
+    setScale(+fittedScale.toFixed(2));
+  };
+  useEffect(() => {
+    if (!people.length) return;
+    const frame = requestAnimationFrame(() => centerTree("auto"));
+    return () => cancelAnimationFrame(frame);
+  }, [scale, stageWidth, people.length]);
+  useEffect(() => {
+    if (!selectedId) return;
+    const frame = requestAnimationFrame(() => {
+      const board = boardRef.current;
+      const card = nodeRefs.current.get(selectedId);
+      if (!board || !card) return;
+      const boardRect = board.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      const left = board.scrollLeft + cardRect.left + cardRect.width / 2 - boardRect.left - board.clientWidth / 2;
+      board.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, people]);
   const savePerson = (draft) => {
     const normalizedDraft = normalizePerson(draft);
     if (draft.id) {
@@ -490,16 +519,16 @@ function App() {
           <div className="canvas-heading">
             <div><h1>Семейное древо</h1><p>Начните с самых дальних известных предков</p></div>
             <div className="zoom-controls" aria-label="Масштаб">
-              <button onClick={() => setScale((value) => Math.max(.75, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
+              <button onClick={() => setScale((value) => Math.max(.4, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
               <output>{Math.round(scale * 100)}%</output>
               <button onClick={() => setScale((value) => Math.min(1.25, +(value + .1).toFixed(2)))} aria-label="Увеличить">+</button>
-              <button className="center-button" onClick={centerTree}><Icon name="target" size={18}/>По центру</button>
+              <button className="center-button" onClick={fitTree}><Icon name="target" size={18}/>Вместить древо</button>
             </div>
           </div>
 
           <div className="tree-board" ref={boardRef}>
-            <div className="tree-scaler" style={{ width: `${100 * scale}%`, minHeight: `${720 * scale}px` }}>
-              <div className="tree-stage" ref={stageRef} style={{ transform: `scale(${scale})` }}>
+            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${720 * scale}px` }}>
+              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, transform: `scale(${scale})` }}>
                 {people.length === 0 ? (
                   <div className="empty-tree">
                     <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
