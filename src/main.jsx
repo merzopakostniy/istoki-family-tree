@@ -543,12 +543,7 @@ function TreeConnections({ people, nodes, stage, scale }) {
           const partnerCenter = partnerRect.left + partnerRect.width / 2;
           const adjacentLimit = (anchorRect.width + partnerRect.width) / 2 + PARTNER_CONNECTOR_WIDTH * scale * 1.5;
           if (Math.abs(anchorCenter - partnerCenter) > adjacentLimit) {
-            return {
-              x: partnerCenter > anchorCenter
-                ? (partnerRect.left - base.left) / scale - PARTNER_CONNECTOR_WIDTH / 2
-                : (partnerRect.right - base.left) / scale + PARTNER_CONNECTOR_WIDTH / 2,
-              y: (partnerRect.top - base.top + partnerRect.height / 2) / scale,
-            };
+            return point(partner.id, "top");
           }
         }
         const parentPoints = parentIds.map((parentId) => point(parentId, "center")).filter(Boolean);
