@@ -574,6 +574,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         const nearestChildY = Math.max(...childPoints.map((item) => item.y));
         const firstChildX = childPoints[0].x;
         const lastChildX = childPoints[childPoints.length - 1].x;
+        const safeReach = (GENERATION_GAP - CARD_HEIGHT) / 2;
         routes.push({
           id: familyId,
           parentIds,
@@ -581,7 +582,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
           from,
           firstChildX,
           lastChildX,
-          baseJunctionY: from.y + (nearestChildY - from.y) * .5,
+          baseJunctionY: nearestChildY + Math.min((from.y - nearestChildY) * .5, safeReach),
           minY: Math.min(from.y, nearestChildY) + 16,
           maxY: Math.max(from.y, nearestChildY) - 16,
           left: Math.min(firstChildX, from.x),
