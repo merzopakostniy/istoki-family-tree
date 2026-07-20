@@ -620,7 +620,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener("resize", draw); };
   }, [people, nodes, stage, scale]);
   const selectedPerson = selectedId ? people.find((person) => person.id === selectedId) : null;
-  const flowIds = selectedPerson ? new Set([selectedPerson.id, ...selectedPerson.partnerIds]) : null;
+  const flowIds = selectedPerson ? new Set([selectedPerson.id]) : null;
   return (
     <svg className="connections" aria-hidden="true">
       {paths.map((path) => {
@@ -664,7 +664,7 @@ function App() {
   const focusIds = selected ? new Set([
     selected.id,
     ...selected.partnerIds,
-    ...people.filter((person) => person.parents.includes(selected.id) || selected.partnerIds.some((partnerId) => person.parents.includes(partnerId))).map((person) => person.id),
+    ...people.filter((person) => person.parents.includes(selected.id)).map((person) => person.id),
   ]) : null;
   const ownerSignedIn = isOwnerUser(authUser);
   const migrationNeeded = cloudState === "empty" && initialLocalPeople.current.length > 0;
