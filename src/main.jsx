@@ -198,7 +198,7 @@ const EMPTY_STAGE_HEIGHT = 770;
 const STAGE_TOP = 28;
 const STAGE_BOTTOM = 54;
 const GENERATION_GAP = 190;
-const BRANCH_COLORS = ["#2f6b45", "#b75b38", "#376d8c", "#9a7020", "#76507c", "#26756f", "#a44d62", "#4e6093", "#6d7834", "#895a3c", "#39788d", "#843f55"];
+const BRANCH_COLORS = ["#5da97e", "#e0865a", "#6ba9d6", "#dcac48", "#b189bd", "#4fb3a8", "#dd8299", "#8b9bdb", "#a7b563", "#c8945f", "#6cb6cf", "#c47b96"];
 
 function marriageKey(firstId, secondId) {
   return [firstId, secondId].filter(Boolean).sort().join("--");
@@ -296,10 +296,44 @@ function buildFamilyLayout(people) {
     });
   };
 
+  const topRootOf = (unit) => {
+    let current = unit;
+    const seen = new Set();
+    while (current.primaryParentId && !seen.has(current.id)) {
+      seen.add(current.id);
+      const parent = unitById.get(current.primaryParentId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current;
+  };
   const roots = units.filter((unit) => !unit.primaryParentId).sort((first, second) => first.order - second.order);
-  roots.forEach(measure);
-  let cursor = STAGE_PADDING;
+  const satelliteTrunk = new Map();
   roots.forEach((root) => {
+    if (root.children.length) return;
+    const memberIds = new Set(root.people.map((person) => person.id));
+    const linkedPerson = people.find((person) => !memberIds.has(person.id) && person.parents.some((parentId) => memberIds.has(parentId)));
+    const linkedUnit = linkedPerson && unitByPersonId.get(linkedPerson.id);
+    if (linkedUnit && linkedUnit.id !== root.id) satelliteTrunk.set(root.id, topRootOf(linkedUnit));
+  });
+  const trunkRoots = roots.filter((root) => !satelliteTrunk.has(root.id));
+  const satellitesByTrunk = new Map();
+  roots.forEach((root) => {
+    const trunk = satelliteTrunk.get(root.id);
+    if (!trunk) return;
+    if (!satellitesByTrunk.has(trunk.id)) satellitesByTrunk.set(trunk.id, []);
+    satellitesByTrunk.get(trunk.id).push(root);
+  });
+  const orderedRoots = [];
+  trunkRoots.forEach((trunk) => {
+    orderedRoots.push(trunk);
+    (satellitesByTrunk.get(trunk.id) || []).forEach((satellite) => orderedRoots.push(satellite));
+  });
+  const orderedIds = new Set(orderedRoots.map((root) => root.id));
+  roots.forEach((root) => { if (!orderedIds.has(root.id)) orderedRoots.push(root); });
+  orderedRoots.forEach(measure);
+  let cursor = STAGE_PADDING;
+  orderedRoots.forEach((root) => {
     place(root, cursor);
     cursor += root.subtreeWidth + ROOT_FAMILY_GAP;
   });
@@ -609,7 +643,8 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         if (childPoints.length > 1) segments.push(`M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`);
         childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
         if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
-        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds };
+        const distant = (route.right - route.left) > CARD_WIDTH * 4.5;
+        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds, distant };
       });
       setPaths(next);
     };
@@ -627,8 +662,9 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
       {paths.map((path) => {
         const isFlow = flowIds ? path.parentIds.some((id) => flowIds.has(id)) : false;
         const isDim = flowIds ? !isFlow : false;
+        const classes = [isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : "", path.distant && !isFlow ? "is-distant" : ""].filter(Boolean).join(" ");
         return (
-          <g key={path.id} className={isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : ""} style={{ "--branch-color": path.color }}>
+          <g key={path.id} className={classes} style={{ "--branch-color": path.color }}>
             <path d={path.d} className="parent-line"/>
             <circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="5"/>
           </g>
