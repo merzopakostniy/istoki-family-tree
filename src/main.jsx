@@ -168,10 +168,10 @@ function Portrait({ person, className }) {
   );
 }
 
-function PersonCard({ person, selected, onSelect, register }) {
+function PersonCard({ person, selected, focus, onSelect, register }) {
   return (
     <button
-      className={`person-card ${selected ? "is-selected" : ""}`}
+      className={`person-card ${selected ? "is-selected" : ""} ${focus === "dim" ? "is-dimmed" : ""} ${focus === "on" ? "is-focused" : ""}`}
       onClick={() => onSelect(person.id)}
       ref={(node) => register(person.id, node)}
       type="button"
@@ -190,10 +190,10 @@ function PersonCard({ person, selected, onSelect, register }) {
 const CARD_WIDTH = 258;
 const CARD_HEIGHT = 118;
 const PARTNER_CONNECTOR_WIDTH = 42;
-const SIBLING_GAP = 66;
-const MARRIAGE_BRANCH_GAP = 164;
-const ROOT_FAMILY_GAP = 132;
-const STAGE_PADDING = 88;
+const SIBLING_GAP = 44;
+const MARRIAGE_BRANCH_GAP = 104;
+const ROOT_FAMILY_GAP = 84;
+const STAGE_PADDING = 56;
 const EMPTY_STAGE_HEIGHT = 770;
 const STAGE_TOP = 28;
 const STAGE_BOTTOM = 54;
@@ -316,13 +316,14 @@ function generationLabel(generation) {
   return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
 }
 
-function FamilyUnit({ unit, selectedId, onSelect, register }) {
+function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
   const anchor = unit.people.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, unit.people[0]);
   const anchorIndex = unit.people.findIndex((person) => person.id === anchor.id);
   const extraMarriages = anchor.partnerIds
     .map((partnerId) => unit.people.findIndex((person) => person.id === partnerId))
     .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
   const cardCenter = (index) => index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
+  const gapCenter = (leftIndex) => leftIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH + PARTNER_CONNECTOR_WIDTH / 2;
   const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
   return (
     <div
@@ -330,23 +331,27 @@ function FamilyUnit({ unit, selectedId, onSelect, register }) {
       style={{ left: `${unit.x}px`, top: `${unit.y}px`, "--family-color": unitColor }}
       data-family={unit.id}
     >
-      {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT + 62}`} aria-hidden="true">
-        {extraMarriages.map((partnerIndex, index) => {
+      {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
+        {extraMarriages.map((partnerIndex) => {
           const anchorX = cardCenter(anchorIndex);
           const partnerX = cardCenter(partnerIndex);
-          const railY = CARD_HEIGHT + 22 + index * 16;
-          const midX = (anchorX + partnerX) / 2;
+          const lowIndex = Math.min(anchorIndex, partnerIndex);
+          const highIndex = Math.max(anchorIndex, partnerIndex);
+          const gaps = [];
+          for (let index = lowIndex; index < highIndex; index += 1) gaps.push(gapCenter(index));
           const partner = unit.people[partnerIndex];
           return <g key={partner.id} className="marriage-rail" style={{ "--family-color": branchColor(marriageKey(anchor.id, partner.id)) }}>
-            <path d={`M ${anchorX} ${CARD_HEIGHT} V ${railY} H ${partnerX} V ${CARD_HEIGHT}`}/>
-            <circle cx={midX - 4} cy={railY} r="4.5"/>
-            <circle cx={midX + 4} cy={railY} r="4.5"/>
+            <path d={`M ${anchorX} ${CARD_HEIGHT / 2} H ${partnerX}`}/>
+            {gaps.map((gapX) => <React.Fragment key={gapX}>
+              <circle cx={gapX - 4} cy={CARD_HEIGHT / 2} r="4.5"/>
+              <circle cx={gapX + 4} cy={CARD_HEIGHT / 2} r="4.5"/>
+            </React.Fragment>)}
           </g>;
         })}
       </svg> : null}
       {unit.people.map((person, index) => <React.Fragment key={person.id}>
         {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" style={{ "--family-color": branchColor(marriageKey(unit.people[index - 1].id, person.id)) }} role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
-        <PersonCard person={person} selected={person.id === selectedId} onSelect={onSelect} register={register}/>
+        <PersonCard person={person} selected={person.id === selectedId} focus={focusIds ? (focusIds.has(person.id) ? (person.id === selectedId ? "" : "on") : "dim") : ""} onSelect={onSelect} register={register}/>
       </React.Fragment>)}
     </div>
   );
@@ -516,7 +521,7 @@ function ConfirmDelete({ person, onConfirm, onClose }) {
   );
 }
 
-function TreeConnections({ people, nodes, stage, scale }) {
+function TreeConnections({ people, nodes, stage, scale, selectedId }) {
   const [paths, setPaths] = useState([]);
   useLayoutEffect(() => {
     const draw = () => {
@@ -603,7 +608,7 @@ function TreeConnections({ people, nodes, stage, scale }) {
         if (childPoints.length > 1) segments.push(`M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`);
         childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
         if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
-        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY };
+        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds };
       });
       setPaths(next);
     };
@@ -614,7 +619,22 @@ function TreeConnections({ people, nodes, stage, scale }) {
     window.addEventListener("resize", draw);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener("resize", draw); };
   }, [people, nodes, stage, scale]);
-  return <svg className="connections" aria-hidden="true">{paths.map((path) => <g key={path.id} style={{ "--branch-color": path.color }}><path d={path.d} className="parent-line"/><circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="5"/></g>)}</svg>;
+  const selectedPerson = selectedId ? people.find((person) => person.id === selectedId) : null;
+  const flowIds = selectedPerson ? new Set([selectedPerson.id, ...selectedPerson.partnerIds]) : null;
+  return (
+    <svg className="connections" aria-hidden="true">
+      {paths.map((path) => {
+        const isFlow = flowIds ? path.parentIds.some((id) => flowIds.has(id)) : false;
+        const isDim = flowIds ? !isFlow : false;
+        return (
+          <g key={path.id} className={isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : ""} style={{ "--branch-color": path.color }}>
+            <path d={path.d} className="parent-line"/>
+            <circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="5"/>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 function App() {
@@ -641,6 +661,11 @@ function App() {
   const boardRef = useRef(null);
   const nodeRefs = useRef(new Map());
   const selected = people.find((person) => person.id === selectedId) || null;
+  const focusIds = selected ? new Set([
+    selected.id,
+    ...selected.partnerIds,
+    ...people.filter((person) => person.parents.includes(selected.id) || selected.partnerIds.some((partnerId) => person.parents.includes(partnerId))).map((person) => person.id),
+  ]) : null;
   const ownerSignedIn = isOwnerUser(authUser);
   const migrationNeeded = cloudState === "empty" && initialLocalPeople.current.length > 0;
   const canManage = ownerSignedIn && cloudState !== "loading" && cloudState !== "error" && !migrationNeeded;
@@ -862,8 +887,8 @@ function App() {
                     {canManage ? <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button> : <button className="button ghost" onClick={handleOwnerAccess}><Icon name="cloud"/>Войти владельцу</button>}
                   </div>
                 ) : <>
-                <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale}/>
-                {familyLayout.units.map((unit) => <FamilyUnit key={unit.id} unit={unit} selectedId={selectedId} onSelect={setSelectedId} register={register}/>)}
+                <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale} selectedId={selectedId}/>
+                {familyLayout.units.map((unit) => <FamilyUnit key={unit.id} unit={unit} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register}/>)}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
                 </>}
               </div>

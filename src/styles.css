@@ -111,14 +111,19 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .tree-scaler { min-width: 940px; margin-inline: auto; }
 .tree-stage { width: 100%; min-width: 940px; height: 770px; position: relative; transform-origin: top left; }
 .connections { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+.connections g { transition: opacity .25s ease; }
 .connections path { fill: none; stroke: var(--branch-color, var(--green)); stroke-width: 1.9; stroke-linecap: square; stroke-linejoin: miter; vector-effect: non-scaling-stroke; shape-rendering: geometricPrecision; }
 .branch-node { fill: var(--paper); stroke: var(--branch-color, var(--green)); stroke-width: 2.2; vector-effect: non-scaling-stroke; }
+.connections g.is-dimmed-line { opacity: .15; }
+.connections g.is-flowing .parent-line { stroke-width: 2.6; stroke-dasharray: 7 7; animation: veinFlow 900ms linear infinite; filter: drop-shadow(0 0 4px var(--branch-color)); }
+.connections g.is-flowing .branch-node { r: 6; filter: drop-shadow(0 0 4px var(--branch-color)); }
+@keyframes veinFlow { to { stroke-dashoffset: -28; } }
 .family-unit { display: flex; align-items: center; flex: 0 0 auto; }
 .positioned-family { position: absolute; z-index: 2; isolation: isolate; }
 .positioned-family.partner-pair::after { content: ""; position: absolute; z-index: -1; inset: -12px -14px; border: 1px dashed var(--family-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
-.marriage-rails { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 180px; overflow: visible; pointer-events: none; }
-.marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 5 4; opacity: .8; vector-effect: non-scaling-stroke; }
-.marriage-rails circle { fill: var(--paper); stroke: var(--family-color, var(--green)); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.marriage-rails { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 2; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
+.marriage-rails circle { fill: var(--surface); stroke: var(--family-color, var(--green)); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .partner-pair { gap: 0; }
 .partner-connector { width: 42px; height: 18px; flex: 0 0 42px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; color: var(--family-color, var(--green)); }
 .partner-connector::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 2px solid currentColor; }
@@ -126,9 +131,12 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .partner-connector i + i { margin-left: -3px; }
 .partner-spacer { width: 42px; flex: 0 0 42px; }
 .person-card { position: relative; z-index: 2; width: 258px; min-height: 118px; border: 1px solid rgba(150,140,116,.55); border-radius: 13px; background: linear-gradient(178deg, #fffdf8 0%, #fbf7ee 60%, #f7f2e7 100%); box-shadow: 0 1px 0 rgba(255,255,255,.75) inset, var(--card-shadow); display: flex; align-items: center; padding: 12px 13px 13px 14px; gap: 14px; text-align: left; cursor: pointer; overflow: hidden; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
-.person-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--family-color, #809070); background: linear-gradient(90deg, var(--family-color, #809070), rgba(191,157,88,.9)); }
+.person-card::before { content: ""; position: absolute; left: 10%; right: 10%; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold) 80%, transparent); opacity: .8; }
 .person-card:hover { transform: translateY(-3px); border-color: rgba(128,144,112,.9); box-shadow: 0 1px 0 rgba(255,255,255,.85) inset, var(--card-shadow-hover); }
 .person-card.is-selected { border-color: var(--terra); box-shadow: 0 0 0 1.5px var(--terra) inset, 0 1px 0 rgba(255,255,255,.7) inset, 0 14px 30px -12px rgba(183,91,56,.4); }
+.person-card.is-dimmed { opacity: .32; filter: saturate(.55); transform: none !important; }
+.person-card.is-dimmed:hover { box-shadow: none; }
+.person-card.is-focused { border-color: var(--gold); box-shadow: 0 0 0 1.5px var(--gold) inset, 0 1px 0 rgba(255,255,255,.7) inset, 0 14px 28px -14px rgba(191,157,88,.5); }
 .avatar, .detail-avatar, .editor-photo-preview { border-radius: 48% / 42%; display: grid; place-items: center; overflow: hidden; font-family: Georgia, serif; color: #f5f2e9; background: radial-gradient(ellipse at 35% 25%, #a7a89e, #50534c 66%, #30332e); border: 3px solid #f3ecdb; box-shadow: 0 0 0 1px var(--gold-soft), 0 3px 8px rgba(48,44,34,.2); }
 .avatar { width: 60px; height: 82px; flex: 0 0 auto; font-size: 18px; letter-spacing: .03em; }
 .portrait-image { width: 100%; height: 100%; display: block; object-fit: cover; transform-origin: center; }
