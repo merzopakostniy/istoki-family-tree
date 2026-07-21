@@ -163,6 +163,7 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 @keyframes slideIn { from { transform: translateX(18px); opacity: 0; } }
 .detail-close { position: absolute; right: 14px; top: 15px; }
 .sheet-handle { display: none; }
+.sheet-more { display: none; }
 .detail-heading { display: flex; align-items: center; gap: 14px; padding: 21px 36px 22px 0; border-bottom: 1px solid var(--line); }
 .detail-avatar { width: 66px; height: 88px; flex: 0 0 auto; font-size: 17px; }
 .detail-heading h2 { margin: 0; font: 30px/1.1 Georgia, "Times New Roman", serif; font-weight: 400; letter-spacing: -.02em; overflow-wrap: anywhere; }
@@ -266,7 +267,7 @@ dd { margin: 0; }
   .empty-tree { inset: 84px auto auto 16px; width: 340px; margin: 0; }
   .empty-tree h2 { font-size: 31px; }
   .avatar { width: 56px; height: 76px; }
-  .detail-panel { position: fixed; top: auto; width: 100%; height: auto; max-height: 176px; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -18px 45px rgba(32,34,29,.16); animation-name: sheetIn; transition: max-height .3s cubic-bezier(.4,0,.2,1); overflow: hidden; padding-top: 4px; }
+  .detail-panel { position: fixed; top: auto; width: 100%; height: auto; max-height: 214px; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -18px 45px rgba(32,34,29,.16); animation-name: sheetIn; transition: max-height .3s cubic-bezier(.4,0,.2,1); overflow: hidden; padding-top: 4px; }
   .detail-panel.is-expanded { max-height: min(72vh, 620px); overflow-y: auto; }
   @keyframes sheetIn { from { transform: translateY(28px); opacity: 0; } }
   .sheet-handle { display: block; width: 100%; border: 0; background: transparent; padding: 9px 0 5px; cursor: pointer; }
@@ -277,6 +278,9 @@ dd { margin: 0; }
   .detail-panel:not(.is-expanded) .placement-section,
   .detail-panel:not(.is-expanded) .detail-actions,
   .detail-panel:not(.is-expanded) .delete-action { display: none; }
+  .sheet-more { display: flex; width: calc(100% - 48px); margin: 2px 24px 0; padding: 9px 2px; border: 0; border-top: 1px solid var(--line); background: transparent; align-items: center; justify-content: space-between; color: var(--terra); font-size: 12.5px; font-weight: 650; cursor: pointer; }
+  .sheet-more .icon { transform: rotate(90deg); transition: transform .25s ease; }
+  .detail-panel.is-expanded .sheet-more .icon { transform: rotate(-90deg); }
   .settings-button { display: none; }
   .cloud-login-button span { display: none; }
   .cloud-login-button { width: 42px; padding: 0; justify-content: center; }

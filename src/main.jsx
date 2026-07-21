@@ -404,6 +404,10 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
         <Portrait person={person} className="detail-avatar"/>
         <div><h2>{person.name}</h2><p>{years(person)}</p></div>
       </div>
+      <button className="sheet-more" onClick={onToggleExpand}>
+        {expanded ? "Свернуть" : "Место рождения, заметки и связи"}
+        <Icon name="chevron" size={15}/>
+      </button>
       <section className="detail-section">
         <div className="section-title"><h3>О человеке</h3>{canEdit && <button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button>}</div>
         <dl>
