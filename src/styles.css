@@ -234,11 +234,16 @@ dd { margin: 0; }
 .spouse-field { min-width: 0; margin: 0; padding: 0; border: 0; }
 .spouse-field legend { margin-bottom: 7px; color: #555950; font-size: 12px; font-weight: 650; }
 .spouse-options { max-height: 156px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; border: 1px solid #cbc8bd; border-radius: 8px; background: #fffefb; box-shadow: inset 0 1px 3px rgba(52,48,36,.05); }
-.form-grid .spouse-option { min-width: 0; min-height: 36px; padding: 7px 9px; display: flex; flex-direction: row; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 7px; color: var(--ink); font-size: 12px; font-weight: 400; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.form-grid .spouse-option { min-width: 0; padding: 7px 9px; display: flex; flex-direction: column; gap: 6px; border: 1px solid transparent; border-radius: 7px; color: var(--ink); font-size: 12px; font-weight: 400; transition: background .15s ease, border-color .15s ease; }
+.form-grid .spouse-option label { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 22px; cursor: pointer; }
 .form-grid .spouse-option:hover { background: #f1f2ec; }
 .form-grid .spouse-option:has(input:checked) { background: var(--green-soft); border-color: rgba(41,77,49,.25); font-weight: 650; }
 .form-grid .spouse-option input { width: 16px; height: 16px; flex: 0 0 auto; margin: 0; padding: 0; accent-color: var(--green); box-shadow: none; }
-.spouse-option span { min-width: 0; overflow-wrap: anywhere; }
+.spouse-option label span { min-width: 0; overflow-wrap: anywhere; }
+.current-marriage-toggle { align-self: flex-start; margin-left: 24px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); padding: 3px 10px; font-size: 10.5px; font-weight: 650; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.current-marriage-toggle:hover { border-color: var(--gold); color: var(--terra); }
+.current-marriage-toggle.is-current { background: var(--gold); border-color: var(--gold); color: #423110; }
+.spouse-hint { margin: 8px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .empty-spouse-copy { padding: 8px; color: var(--muted); font-size: 11px; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .confirm-dialog { width: min(430px, 100%); background: var(--surface); border: 1px solid #cbc7bc; border-radius: 14px; box-shadow: 0 24px 80px rgba(29,31,25,.2); padding: 30px; text-align: center; }

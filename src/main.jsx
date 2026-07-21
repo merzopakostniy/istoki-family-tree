@@ -51,6 +51,7 @@ function normalizePerson(person) {
     generation: Number.isFinite(clean.generation) ? Math.max(0, Math.round(clean.generation)) : 0,
     parents: Array.isArray(clean.parents) ? clean.parents : [],
     partnerIds: [...new Set(partnerIds.filter(Boolean))],
+    currentPartnerId: clean.currentPartnerId || "",
     birthplace: clean.birthplace || "",
     deathplace: clean.deathplace || "",
     maidenName: clean.maidenName || "",
@@ -72,6 +73,7 @@ function normalizePeople(people) {
       const partner = byId.get(partnerId);
       if (!partner.partnerIds.includes(person.id)) partner.partnerIds.push(person.id);
     });
+    if (!person.partnerIds.includes(person.currentPartnerId)) person.currentPartnerId = "";
   });
   const maxPasses = Math.min(normalized.length + 2, 64);
   for (let pass = 0; pass < maxPasses; pass += 1) {
@@ -95,6 +97,7 @@ function groupPartnerUnits(people) {
   const byId = new Map(people.map((person) => [person.id, person]));
   const seen = new Set();
   const units = [];
+  const groupable = (from, toId) => !from.currentPartnerId || from.currentPartnerId === toId;
   people.forEach((person) => {
     if (seen.has(person.id)) return;
     const component = [];
@@ -104,7 +107,11 @@ function groupPartnerUnits(people) {
       if (!current || seen.has(current.id)) continue;
       seen.add(current.id);
       component.push(current);
-      current.partnerIds.forEach((id) => { if (byId.has(id) && !seen.has(id)) queue.push(byId.get(id)); });
+      current.partnerIds.forEach((id) => {
+        if (!byId.has(id) || seen.has(id)) return;
+        const partner = byId.get(id);
+        if (groupable(current, id) && groupable(partner, current.id)) queue.push(partner);
+      });
     }
     if (component.length < 3) {
       units.push(component);
@@ -466,7 +473,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
   const [photoError, setPhotoError] = useState("");
   const [form, setForm] = useState({
     name: "", birth: "", death: "", relation: "", generation: 0,
-    parents: [], partnerIds: [], birthplace: "", deathplace: "", maidenName: "", note: "",
+    parents: [], partnerIds: [], currentPartnerId: "", birthplace: "", deathplace: "", maidenName: "", note: "",
     photo: "", photoX: 50, photoY: 50, photoScale: 1,
     ...(person ? normalizePerson(person) : {}),
   });
@@ -502,9 +509,11 @@ function PersonEditor({ person, people, onSave, onClose }) {
     setForm((current) => {
       const partnerIds = checked ? [...new Set([...current.partnerIds, partnerId])] : current.partnerIds.filter((id) => id !== partnerId);
       const generations = partnerIds.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
-      return { ...current, partnerIds, generation: generations.length ? Math.max(...generations) : current.generation };
+      const currentPartnerId = checked ? current.currentPartnerId : (current.currentPartnerId === partnerId ? "" : current.currentPartnerId);
+      return { ...current, partnerIds, currentPartnerId, generation: generations.length ? Math.max(...generations) : current.generation };
     });
   };
+  const setCurrentPartner = (partnerId) => setForm((current) => ({ ...current, currentPartnerId: current.currentPartnerId === partnerId ? "" : partnerId }));
   const submit = (event) => {
     event.preventDefault();
     onSave(form);
@@ -540,11 +549,28 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <label>Первый родитель<select name="parentId1" value={form.parents?.[0] || ""} onChange={(e) => chooseParent(0, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Второй родитель<select name="parentId2" value={form.parents?.[1] || ""} onChange={(e) => chooseParent(1, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <fieldset className="wide spouse-field">
-            <legend>Супруги и супруги</legend>
+            <legend>Супруги</legend>
             <div className="spouse-options">
-              {people.filter((item) => item.id !== person?.id).map((item) => <label className="spouse-option" key={item.id}><input type="checkbox" checked={form.partnerIds.includes(item.id)} onChange={(e) => togglePartner(item.id, e.target.checked)}/><span>{item.name}</span></label>)}
+              {people.filter((item) => item.id !== person?.id).map((item) => {
+                const checked = form.partnerIds.includes(item.id);
+                const isCurrent = form.currentPartnerId === item.id;
+                return (
+                  <span className="spouse-option" key={item.id}>
+                    <label>
+                      <input type="checkbox" checked={checked} onChange={(e) => togglePartner(item.id, e.target.checked)}/>
+                      <span>{item.name}</span>
+                    </label>
+                    {checked && form.partnerIds.length > 1 && (
+                      <button type="button" className={`current-marriage-toggle ${isCurrent ? "is-current" : ""}`} onClick={() => setCurrentPartner(item.id)}>
+                        {isCurrent ? "Текущий брак" : "Отметить текущим"}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
               {people.filter((item) => item.id !== person?.id).length === 0 ? <span className="empty-spouse-copy">Сначала добавьте второго человека</span> : null}
             </div>
+            {form.partnerIds.length > 1 && <p className="spouse-hint">Если бывшие браки не отмечены, все супруги будут показаны в одной группе на древе.</p>}
           </fieldset>
           <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
