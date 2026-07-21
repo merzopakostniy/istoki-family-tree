@@ -393,13 +393,14 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
   );
 }
 
-function DetailPanel({ person, people, canEdit, onClose, onEdit, onDelete, onSelect, onMove }) {
+function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClose, onEdit, onDelete, onSelect, onMove }) {
   if (!person) return null;
   const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || person.partnerIds.includes(item.id) || item.partnerIds.includes(person.id));
   return (
-    <aside className="detail-panel" aria-label={`Сведения: ${person.name}`}>
+    <aside className={`detail-panel ${expanded ? "is-expanded" : ""}`} aria-label={`Сведения: ${person.name}`}>
+      <button className="sheet-handle" onClick={onToggleExpand} aria-label={expanded ? "Свернуть" : "Показать подробнее"}><i/></button>
       <button className="icon-button detail-close" onClick={onClose} aria-label="Закрыть карточку"><Icon name="close" /></button>
-      <div className="detail-heading">
+      <div className="detail-heading" onClick={onToggleExpand}>
         <Portrait person={person} className="detail-avatar"/>
         <div><h2>{person.name}</h2><p>{years(person)}</p></div>
       </div>
@@ -691,6 +692,7 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [cloudState, setCloudState] = useState("loading");
   const [selectedId, setSelectedId] = useState(null);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const [editor, setEditor] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [scale, setScale] = useState(1);
@@ -811,6 +813,7 @@ function App() {
     const frame = requestAnimationFrame(() => fitTree());
     return () => cancelAnimationFrame(frame);
   }, [people.length, stageWidth, familyLayout.height]);
+  useEffect(() => { setSheetExpanded(false); }, [selectedId]);
   useEffect(() => {
     if (!people.length) return;
     const frame = requestAnimationFrame(() => centerTree("auto"));
@@ -946,7 +949,7 @@ function App() {
           </div>
         </section>
 
-        <DetailPanel person={selected} people={people} canEdit={canManage} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId} onMove={(direction) => movePerson(selected.id, direction)}/>
+        <DetailPanel person={selected} people={people} canEdit={canManage} expanded={sheetExpanded} onToggleExpand={() => setSheetExpanded((value) => !value)} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId} onMove={(direction) => movePerson(selected.id, direction)}/>
       </main>
       {editor && <PersonEditor person={editor === "new" ? null : editor} people={people} onSave={savePerson} onClose={() => setEditor(false)}/>}
       {deleteCandidate && <ConfirmDelete person={deleteCandidate} onConfirm={deletePerson} onClose={() => setDeleteCandidate(null)}/>}
