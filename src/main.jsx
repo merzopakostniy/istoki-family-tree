@@ -371,7 +371,6 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
   const extraMarriages = anchor.partnerIds
     .map((partnerId) => unit.people.findIndex((person) => person.id === partnerId))
     .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
-  const cardCenter = (index) => index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
   const gapCenter = (leftIndex) => leftIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH + PARTNER_CONNECTOR_WIDTH / 2;
   const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
   return (
@@ -382,16 +381,15 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
     >
       {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
         {extraMarriages.map((partnerIndex) => {
-          const anchorX = cardCenter(anchorIndex);
-          const partnerX = cardCenter(partnerIndex);
           const lowIndex = Math.min(anchorIndex, partnerIndex);
           const highIndex = Math.max(anchorIndex, partnerIndex);
           const gaps = [];
           for (let index = lowIndex; index < highIndex; index += 1) gaps.push(gapCenter(index));
           const partner = unit.people[partnerIndex];
+          const gapHalf = PARTNER_CONNECTOR_WIDTH / 2 - 3;
           return <g key={partner.id} className="marriage-rail" style={{ "--family-color": branchColor(marriageKey(anchor.id, partner.id)) }}>
-            <path d={`M ${anchorX} ${CARD_HEIGHT / 2} H ${partnerX}`}/>
             {gaps.map((gapX) => <React.Fragment key={gapX}>
+              <path d={`M ${gapX - gapHalf} ${CARD_HEIGHT / 2} H ${gapX + gapHalf}`}/>
               <circle cx={gapX - 4} cy={CARD_HEIGHT / 2} r="4.5"/>
               <circle cx={gapX + 4} cy={CARD_HEIGHT / 2} r="4.5"/>
             </React.Fragment>)}
