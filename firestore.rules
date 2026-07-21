@@ -8,7 +8,7 @@ rules_version = '2';
 // Each document is a public genealogy record. It contains no account email,
 // role, token, billing information, or other private user-profile fields.
 // Required fields:
-// id, name, birth, death, relation, generation, parents, partnerIds,
+// id, name, birth, death, relation, generation, parents, partnerIds, currentPartnerId, formerPartnerIds,
 // birthplace, deathplace, maidenName, manualGeneration, note, photo,
 // photoX, photoY, photoScale.
 //
@@ -35,12 +35,12 @@ service cloud.firestore {
     function isValidPerson(data, personId) {
       return data.keys().hasAll([
           'id', 'name', 'birth', 'death', 'relation', 'generation',
-          'parents', 'partnerIds', 'birthplace', 'deathplace', 'maidenName',
+          'parents', 'partnerIds', 'currentPartnerId', 'formerPartnerIds', 'birthplace', 'deathplace', 'maidenName',
           'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale'
         ]) &&
         data.keys().hasOnly([
           'id', 'name', 'birth', 'death', 'relation', 'generation',
-          'parents', 'partnerIds', 'birthplace', 'deathplace', 'maidenName',
+          'parents', 'partnerIds', 'currentPartnerId', 'formerPartnerIds', 'birthplace', 'deathplace', 'maidenName',
           'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale'
         ]) &&
         data.id is string && data.id == personId && data.id.size() > 0 && data.id.size() <= 160 &&
@@ -51,6 +51,8 @@ service cloud.firestore {
         data.generation is int && data.generation >= 0 && data.generation <= 1000 &&
         data.parents is list && data.parents.size() <= 16 &&
         data.partnerIds is list && data.partnerIds.size() <= 16 &&
+        validString(data.currentPartnerId, 160) &&
+        data.formerPartnerIds is list && data.formerPartnerIds.size() <= 16 &&
         validString(data.birthplace, 240) &&
         validString(data.deathplace, 240) &&
         validString(data.maidenName, 240) &&

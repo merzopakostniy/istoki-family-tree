@@ -245,6 +245,11 @@ dd { margin: 0; }
 .current-marriage-toggle { align-self: flex-start; margin-left: 24px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); padding: 3px 10px; font-size: 10.5px; font-weight: 650; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
 .current-marriage-toggle:hover { border-color: var(--gold); color: var(--terra); }
 .current-marriage-toggle.is-current { background: var(--gold); border-color: var(--gold); color: #423110; }
+.marriage-status-controls { display: flex; flex-wrap: wrap; gap: 5px; margin-left: 24px; }
+.marriage-status-controls .current-marriage-toggle { margin-left: 0; }
+.former-marriage-toggle { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); padding: 3px 10px; font-size: 10.5px; font-weight: 650; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.former-marriage-toggle:hover { border-color: #be7c65; color: #9d3f2b; }
+.former-marriage-toggle.is-former { background: #f8e8e2; border-color: #d7a290; color: #803b2b; }
 .spouse-hint { margin: 8px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .empty-spouse-copy { padding: 8px; color: var(--muted); font-size: 11px; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 10px; }

@@ -20,7 +20,7 @@ const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 const peopleCollection = collection(db, "trees", "main", "people");
 const PERSON_FIELDS = [
-  "id", "name", "birth", "death", "relation", "generation", "parents", "partnerIds",
+  "id", "name", "birth", "death", "relation", "generation", "parents", "partnerIds", "currentPartnerId", "formerPartnerIds",
   "birthplace", "deathplace", "maidenName", "manualGeneration", "note", "photo",
   "photoX", "photoY", "photoScale",
 ];

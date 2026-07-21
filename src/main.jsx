@@ -52,6 +52,7 @@ function normalizePerson(person) {
     parents: Array.isArray(clean.parents) ? clean.parents : [],
     partnerIds: [...new Set(partnerIds.filter(Boolean))],
     currentPartnerId: clean.currentPartnerId || "",
+    formerPartnerIds: [...new Set((Array.isArray(clean.formerPartnerIds) ? clean.formerPartnerIds : []).filter(Boolean))],
     birthplace: clean.birthplace || "",
     deathplace: clean.deathplace || "",
     maidenName: clean.maidenName || "",
@@ -74,6 +75,7 @@ function normalizePeople(people) {
       if (!partner.partnerIds.includes(person.id)) partner.partnerIds.push(person.id);
     });
     if (!person.partnerIds.includes(person.currentPartnerId)) person.currentPartnerId = "";
+    person.formerPartnerIds = person.formerPartnerIds.filter((id) => person.partnerIds.includes(id) && id !== person.currentPartnerId);
   });
   const maxPasses = Math.min(normalized.length + 2, 64);
   for (let pass = 0; pass < maxPasses; pass += 1) {
@@ -395,9 +397,10 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
       "--marriage-color": branchColor(marriageKey(currentMarriage[0].id, currentMarriage[1].id)),
     }
     : null;
+  const hasMarriageStatus = unit.people.some((person) => person.currentPartnerId || person.formerPartnerIds.length);
   return (
     <div
-      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${currentMarriage ? "no-shared-box" : ""}`}
+      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${hasMarriageStatus ? "no-shared-box" : ""}`}
       style={{ left: `${unit.x}px`, top: `${unit.y}px`, "--family-color": unitColor }}
       data-family={unit.id}
     >
@@ -489,7 +492,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
   const [photoError, setPhotoError] = useState("");
   const [form, setForm] = useState({
     name: "", birth: "", death: "", relation: "", generation: 0,
-    parents: [], partnerIds: [], currentPartnerId: "", birthplace: "", deathplace: "", maidenName: "", note: "",
+    parents: [], partnerIds: [], currentPartnerId: "", formerPartnerIds: [], birthplace: "", deathplace: "", maidenName: "", note: "",
     photo: "", photoX: 50, photoY: 50, photoScale: 1,
     ...(person ? normalizePerson(person) : {}),
   });
@@ -526,10 +529,16 @@ function PersonEditor({ person, people, onSave, onClose }) {
       const partnerIds = checked ? [...new Set([...current.partnerIds, partnerId])] : current.partnerIds.filter((id) => id !== partnerId);
       const generations = partnerIds.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
       const currentPartnerId = checked ? current.currentPartnerId : (current.currentPartnerId === partnerId ? "" : current.currentPartnerId);
-      return { ...current, partnerIds, currentPartnerId, generation: generations.length ? Math.max(...generations) : current.generation };
+      const formerPartnerIds = checked ? current.formerPartnerIds : current.formerPartnerIds.filter((id) => id !== partnerId);
+      return { ...current, partnerIds, currentPartnerId, formerPartnerIds, generation: generations.length ? Math.max(...generations) : current.generation };
     });
   };
-  const setCurrentPartner = (partnerId) => setForm((current) => ({ ...current, currentPartnerId: current.currentPartnerId === partnerId ? "" : partnerId }));
+  const setCurrentPartner = (partnerId, isCurrent) => setForm((current) => ({ ...current, currentPartnerId: isCurrent ? "" : partnerId, formerPartnerIds: current.formerPartnerIds.filter((id) => id !== partnerId) }));
+  const setFormerPartner = (partnerId, isFormer) => setForm((current) => ({
+    ...current,
+    currentPartnerId: current.currentPartnerId === partnerId ? "" : current.currentPartnerId,
+    formerPartnerIds: isFormer ? current.formerPartnerIds.filter((id) => id !== partnerId) : [...new Set([...current.formerPartnerIds, partnerId])],
+  }));
   const submit = (event) => {
     event.preventDefault();
     onSave(form);
@@ -569,24 +578,28 @@ function PersonEditor({ person, people, onSave, onClose }) {
             <div className="spouse-options">
               {people.filter((item) => item.id !== person?.id).map((item) => {
                 const checked = form.partnerIds.includes(item.id);
-                const isCurrent = form.currentPartnerId === item.id;
+                const isCurrent = form.currentPartnerId === item.id || item.currentPartnerId === form.id;
+                const isFormer = form.formerPartnerIds.includes(item.id) || item.formerPartnerIds.includes(form.id);
                 return (
                   <span className="spouse-option" key={item.id}>
                     <label>
                       <input type="checkbox" checked={checked} onChange={(e) => togglePartner(item.id, e.target.checked)}/>
                       <span>{item.name}</span>
                     </label>
-                    {checked && form.partnerIds.length > 1 && (
-                      <button type="button" className={`current-marriage-toggle ${isCurrent ? "is-current" : ""}`} onClick={() => setCurrentPartner(item.id)}>
+                    {checked && <span className="marriage-status-controls">
+                      <button type="button" className={`current-marriage-toggle ${isCurrent ? "is-current" : ""}`} onClick={() => setCurrentPartner(item.id, isCurrent)}>
                         {isCurrent ? "Текущий брак" : "Отметить текущим"}
                       </button>
-                    )}
+                      <button type="button" className={`former-marriage-toggle ${isFormer ? "is-former" : ""}`} onClick={() => setFormerPartner(item.id, isFormer)}>
+                        {isFormer ? "Бывший брак" : "Отметить бывшим"}
+                      </button>
+                    </span>}
                   </span>
                 );
               })}
               {people.filter((item) => item.id !== person?.id).length === 0 ? <span className="empty-spouse-copy">Сначала добавьте второго человека</span> : null}
             </div>
-            {form.partnerIds.length > 1 && <p className="spouse-hint">При отметке текущего брака все супруги остаются рядом, а общий фон группы скрывается.</p>}
+            {form.partnerIds.length > 0 && <p className="spouse-hint">Отметьте текущий или бывший брак. Рамка показывается только у текущей пары; бывшие супруги остаются рядом без фона.</p>}
           </fieldset>
           <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
@@ -898,15 +911,27 @@ function App() {
           if (person.id === normalizedDraft.id) return normalizedDraft;
           const wasPartner = previous?.partnerIds.includes(person.id);
           const isPartner = normalizedDraft.partnerIds.includes(person.id);
-          if (isPartner) return { ...person, partnerIds: [...new Set([...person.partnerIds, normalizedDraft.id])], generation: normalizedDraft.generation };
-          if (wasPartner) return { ...person, partnerIds: person.partnerIds.filter((id) => id !== normalizedDraft.id) };
+          if (isPartner) return {
+            ...person,
+            partnerIds: [...new Set([...person.partnerIds, normalizedDraft.id])],
+            currentPartnerId: normalizedDraft.currentPartnerId === person.id ? normalizedDraft.id : (person.currentPartnerId === normalizedDraft.id ? "" : person.currentPartnerId),
+            formerPartnerIds: normalizedDraft.formerPartnerIds.includes(person.id) ? [...new Set([...person.formerPartnerIds, normalizedDraft.id])] : person.formerPartnerIds.filter((id) => id !== normalizedDraft.id),
+            generation: normalizedDraft.generation,
+          };
+          if (wasPartner) return { ...person, partnerIds: person.partnerIds.filter((id) => id !== normalizedDraft.id), currentPartnerId: person.currentPartnerId === normalizedDraft.id ? "" : person.currentPartnerId, formerPartnerIds: person.formerPartnerIds.filter((id) => id !== normalizedDraft.id) };
           return person;
         });
       }, "Запись сохранена в общем древе");
       setSelectedId(normalizedDraft.id);
     } else {
       const created = { ...normalizedDraft, id: `person-${Date.now()}` };
-      commitPeople((current) => [...current.map((person) => created.partnerIds.includes(person.id) ? { ...person, partnerIds: [...new Set([...person.partnerIds, created.id])], generation: created.generation } : person), created], "Человек добавлен в общее древо");
+      commitPeople((current) => [...current.map((person) => created.partnerIds.includes(person.id) ? {
+        ...person,
+        partnerIds: [...new Set([...person.partnerIds, created.id])],
+        currentPartnerId: created.currentPartnerId === person.id ? created.id : person.currentPartnerId,
+        formerPartnerIds: created.formerPartnerIds.includes(person.id) ? [...new Set([...person.formerPartnerIds, created.id])] : person.formerPartnerIds,
+        generation: created.generation,
+      } : person), created], "Человек добавлен в общее древо");
       setSelectedId(created.id);
     }
     setEditor(false);
@@ -952,6 +977,8 @@ function App() {
         ...person,
         parents: person.parents.filter((parentId) => parentId !== id),
         partnerIds: person.partnerIds.filter((partnerId) => partnerId !== id),
+        currentPartnerId: person.currentPartnerId === id ? "" : person.currentPartnerId,
+        formerPartnerIds: person.formerPartnerIds.filter((partnerId) => partnerId !== id),
       })), "Человек удалён из общего древа");
     setSelectedId(null);
     setDeleteCandidate(null);
