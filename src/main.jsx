@@ -183,7 +183,7 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
       <span className="person-copy">
         <strong>{person.name}</strong>
         <span className="person-years">{years(person)}</span>
-        <small>{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation || "родственник"].filter(Boolean).join(" · ")}</small>
+        {(person.maidenName || person.relation) && <small>{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation].filter(Boolean).join(" · ")}</small>}
       </span>
     </button>
   );
