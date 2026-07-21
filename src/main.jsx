@@ -114,8 +114,15 @@ function groupPartnerUnits(people) {
     }
     const anchor = component.reduce((best, item) => item.partnerIds.length > best.partnerIds.length ? item : best, component[0]);
     const partners = component.filter((item) => anchor.partnerIds.includes(item.id));
+    const currentPartner = partners.find((item) => anchor.currentPartnerId === item.id || item.currentPartnerId === anchor.id);
+    const leftPartner = currentPartner?.id === partners[0]?.id ? currentPartner : partners[0] || currentPartner;
+    const rightPartners = currentPartner
+      ? (leftPartner?.id === currentPartner.id
+        ? partners.filter((item) => item.id !== currentPartner.id)
+        : [currentPartner, ...partners.filter((item) => item.id !== currentPartner.id && item.id !== leftPartner?.id)])
+      : partners.slice(1);
     const remaining = component.filter((item) => item.id !== anchor.id && !anchor.partnerIds.includes(item.id));
-    units.push([partners[0], anchor, ...partners.slice(1), ...remaining].filter(Boolean));
+    units.push([leftPartner, anchor, ...rightPartners, ...remaining].filter(Boolean));
   });
   return units;
 }
@@ -375,13 +382,26 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
     .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
   const gapCenter = (leftIndex) => leftIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH + PARTNER_CONNECTOR_WIDTH / 2;
   const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
-  const hasMarkedMarriage = unit.people.some((person) => person.currentPartnerId);
+  const currentMarriage = unit.people
+    .map((person) => [person, unit.people.find((item) => item.id === person.currentPartnerId)])
+    .find(([person, partner]) => partner && arePartners(person, partner));
+  const currentMarriageIndices = currentMarriage
+    ? [unit.people.findIndex((person) => person.id === currentMarriage[0].id), unit.people.findIndex((person) => person.id === currentMarriage[1].id)].sort((first, second) => first - second)
+    : null;
+  const currentMarriageFrame = currentMarriageIndices && currentMarriageIndices[1] - currentMarriageIndices[0] === 1
+    ? {
+      left: `${currentMarriageIndices[0] * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - 14}px`,
+      width: `${CARD_WIDTH * 2 + PARTNER_CONNECTOR_WIDTH + 28}px`,
+      "--marriage-color": branchColor(marriageKey(currentMarriage[0].id, currentMarriage[1].id)),
+    }
+    : null;
   return (
     <div
-      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${hasMarkedMarriage ? "no-shared-box" : ""}`}
+      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${currentMarriage ? "no-shared-box" : ""}`}
       style={{ left: `${unit.x}px`, top: `${unit.y}px`, "--family-color": unitColor }}
       data-family={unit.id}
     >
+      {currentMarriageFrame ? <span className="current-marriage-frame" style={currentMarriageFrame} aria-hidden="true"/> : null}
       {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
         {extraMarriages.map((partnerIndex) => {
           const lowIndex = Math.min(anchorIndex, partnerIndex);

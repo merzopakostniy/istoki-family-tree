@@ -139,6 +139,7 @@ nav { display: flex; align-items: center; gap: 8px; }
 @keyframes familyIn { from { opacity: 0; filter: blur(4px); } }
 .positioned-family.partner-pair::after { content: ""; position: absolute; z-index: -1; inset: -12px -14px; border: 1px dashed var(--family-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
 .positioned-family.no-shared-box::after { display: none; }
+.current-marriage-frame { position: absolute; z-index: -1; top: -12px; height: calc(100% + 24px); border: 1px dashed var(--marriage-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
 .marriage-rails { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 2; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
 .marriage-rails circle { fill: var(--surface); stroke: var(--family-color, var(--green)); stroke-width: 2; vector-effect: non-scaling-stroke; }
