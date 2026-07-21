@@ -913,9 +913,9 @@ function App() {
             </div>
           </div>
 
-          <div className="tree-board" ref={boardRef}>
-            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${familyLayout.height * scale}px` }}>
-              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${familyLayout.height}px`, transform: `scale(${scale})` }}>
+          <div className="tree-board" ref={boardRef} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
+            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${familyLayout.height * scale}px` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
+              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${familyLayout.height}px`, transform: `scale(${scale})` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
                 {people.length === 0 ? (
                   <div className="empty-tree">
                     <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
