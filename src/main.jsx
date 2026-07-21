@@ -34,7 +34,9 @@ function initials(name) {
 }
 
 function years(person) {
-  return `${person.birth || "?"} — ${person.death || ""}`;
+  if (!person.birth && !person.death) return "Нет данных";
+  if (person.birth && person.death) return `${person.birth} — ${person.death}`;
+  return person.birth || `— ${person.death}`;
 }
 
 function normalizePerson(person) {
@@ -612,6 +614,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         routes.push({
           id: familyId,
           parentIds,
+          childIds: children,
           childPoints,
           from,
           firstChildX,
@@ -644,7 +647,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
         if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
         const distant = (route.right - route.left) > CARD_WIDTH * 4.5;
-        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds, distant };
+        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds, childIds: route.childIds, distant };
       });
       setPaths(next);
     };
@@ -660,7 +663,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
   return (
     <svg className="connections" aria-hidden="true">
       {paths.map((path) => {
-        const isFlow = flowIds ? path.parentIds.some((id) => flowIds.has(id)) : false;
+        const isFlow = flowIds ? path.parentIds.some((id) => flowIds.has(id)) || (!selectedPerson.partnerIds.length && path.childIds.includes(selectedPerson.id)) : false;
         const isDim = flowIds ? !isFlow : false;
         const classes = [isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : "", path.distant && !isFlow ? "is-distant" : ""].filter(Boolean).join(" ");
         return (
@@ -702,6 +705,7 @@ function App() {
     selected.id,
     ...selected.partnerIds,
     ...people.filter((person) => person.parents.includes(selected.id)).map((person) => person.id),
+    ...(selected.partnerIds.length ? [] : selected.parents),
   ]) : null;
   const ownerSignedIn = isOwnerUser(authUser);
   const migrationNeeded = cloudState === "empty" && initialLocalPeople.current.length > 0;
