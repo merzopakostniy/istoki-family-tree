@@ -799,9 +799,18 @@ function App() {
     if (!board) return;
     const widthScale = (board.clientWidth - 40) / stageWidth;
     const heightScale = (board.clientHeight - 40) / familyLayout.height;
-    const fittedScale = Math.max(.25, Math.min(1, widthScale, heightScale));
+    const fittedScale = Math.max(.08, Math.min(1, widthScale, heightScale));
     setScale(+fittedScale.toFixed(2));
   };
+  const didAutoFit = useRef(false);
+  useEffect(() => {
+    if (!people.length || didAutoFit.current) return;
+    const board = boardRef.current;
+    if (!board || !board.clientWidth) return;
+    didAutoFit.current = true;
+    const frame = requestAnimationFrame(() => fitTree());
+    return () => cancelAnimationFrame(frame);
+  }, [people.length, stageWidth, familyLayout.height]);
   useEffect(() => {
     if (!people.length) return;
     const frame = requestAnimationFrame(() => centerTree("auto"));
@@ -910,7 +919,7 @@ function App() {
           <div className="canvas-heading">
             <div><h1>Семейное древо</h1><p>Начните с самых дальних известных предков</p></div>
             <div className="zoom-controls" aria-label="Масштаб">
-              <button onClick={() => setScale((value) => Math.max(.25, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
+              <button onClick={() => setScale((value) => Math.max(.08, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
               <output>{Math.round(scale * 100)}%</output>
               <button onClick={() => setScale((value) => Math.min(1.25, +(value + .1).toFixed(2)))} aria-label="Увеличить">+</button>
               <button className="center-button" onClick={fitTree}><Icon name="target" size={18}/>Вместить древо</button>
