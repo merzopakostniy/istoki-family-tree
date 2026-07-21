@@ -97,7 +97,6 @@ function groupPartnerUnits(people) {
   const byId = new Map(people.map((person) => [person.id, person]));
   const seen = new Set();
   const units = [];
-  const groupable = (from, toId) => !from.currentPartnerId || from.currentPartnerId === toId;
   people.forEach((person) => {
     if (seen.has(person.id)) return;
     const component = [];
@@ -107,11 +106,7 @@ function groupPartnerUnits(people) {
       if (!current || seen.has(current.id)) continue;
       seen.add(current.id);
       component.push(current);
-      current.partnerIds.forEach((id) => {
-        if (!byId.has(id) || seen.has(id)) return;
-        const partner = byId.get(id);
-        if (groupable(current, id) && groupable(partner, current.id)) queue.push(partner);
-      });
+      current.partnerIds.forEach((id) => { if (byId.has(id) && !seen.has(id)) queue.push(byId.get(id)); });
     }
     if (component.length < 3) {
       units.push(component);
@@ -380,9 +375,10 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
     .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
   const gapCenter = (leftIndex) => leftIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH + PARTNER_CONNECTOR_WIDTH / 2;
   const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
+  const hasMarkedMarriage = unit.people.some((person) => person.currentPartnerId);
   return (
     <div
-      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""}`}
+      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${hasMarkedMarriage ? "no-shared-box" : ""}`}
       style={{ left: `${unit.x}px`, top: `${unit.y}px`, "--family-color": unitColor }}
       data-family={unit.id}
     >
@@ -570,7 +566,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
               })}
               {people.filter((item) => item.id !== person?.id).length === 0 ? <span className="empty-spouse-copy">Сначала добавьте второго человека</span> : null}
             </div>
-            {form.partnerIds.length > 1 && <p className="spouse-hint">Если бывшие браки не отмечены, все супруги будут показаны в одной группе на древе.</p>}
+            {form.partnerIds.length > 1 && <p className="spouse-hint">При отметке текущего брака все супруги остаются рядом, а общий фон группы скрывается.</p>}
           </fieldset>
           <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
           <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
