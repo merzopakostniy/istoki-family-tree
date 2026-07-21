@@ -85,7 +85,7 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .workspace { height: calc(100vh - 86px); position: relative; }
 
 .tree-area {
-  min-width: 0; height: 100%; position: relative; overflow: hidden;
+  min-width: 0; height: 100%; position: relative; z-index: 0; overflow: hidden;
   --canvas-dark: #191c15;
   background-color: var(--canvas-dark);
   background-image:
@@ -97,6 +97,18 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
   background-size: auto, auto, auto, auto, 24px 24px;
   box-shadow: inset 0 0 150px rgba(0,0,0,.35);
   transition: margin-right .22s ease;
+}
+.tree-area::before {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(circle 42% at 82% 82%, rgba(191,157,88,.10), transparent 70%),
+    radial-gradient(circle 38% at 10% 85%, rgba(94,140,110,.09), transparent 70%);
+  animation: ambientDrift 22s ease-in-out infinite alternate;
+}
+@keyframes ambientDrift {
+  0% { transform: translate(0, 0) scale(1); opacity: .85; }
+  100% { transform: translate(-2%, -3%) scale(1.08); opacity: 1; }
 }
 .tree-area.has-detail { margin-right: 354px; }
 .canvas-heading { height: 102px; padding: 22px 28px 10px 30px; display: flex; align-items: flex-start; justify-content: space-between; position: relative; z-index: 4; }
@@ -124,7 +136,8 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .connections g.is-flowing .branch-node { r: 6; filter: drop-shadow(0 0 4px var(--branch-color)); }
 @keyframes veinFlow { to { stroke-dashoffset: -28; } }
 .family-unit { display: flex; align-items: center; flex: 0 0 auto; }
-.positioned-family { position: absolute; z-index: 2; isolation: isolate; }
+.positioned-family { position: absolute; z-index: 2; isolation: isolate; animation: familyIn .6s ease-out both; }
+@keyframes familyIn { from { opacity: 0; filter: blur(4px); } }
 .positioned-family.partner-pair::after { content: ""; position: absolute; z-index: -1; inset: -12px -14px; border: 1px dashed var(--family-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
 .marriage-rails { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 2; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
@@ -135,9 +148,11 @@ nav { align-self: stretch; display: flex; align-items: stretch; gap: 26px; }
 .partner-connector i { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; background: var(--canvas-dark, var(--paper)); position: relative; z-index: 1; }
 .partner-connector i + i { margin-left: -3px; }
 .partner-spacer { width: 42px; flex: 0 0 42px; }
-.person-card { position: relative; z-index: 2; width: 258px; min-height: 118px; border: 1px solid rgba(150,140,116,.55); border-radius: 13px; background: linear-gradient(178deg, #fffdf8 0%, #fbf7ee 60%, #f7f2e7 100%); box-shadow: 0 1px 0 rgba(255,255,255,.75) inset, var(--card-shadow); display: flex; align-items: center; padding: 12px 13px 13px 14px; gap: 14px; text-align: left; cursor: pointer; overflow: hidden; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
-.person-card::before { content: ""; position: absolute; left: 10%; right: 10%; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold) 80%, transparent); opacity: .8; }
-.person-card:hover { transform: translateY(-3px); border-color: rgba(128,144,112,.9); box-shadow: 0 1px 0 rgba(255,255,255,.85) inset, var(--card-shadow-hover); }
+.person-card { --tilt-x: 0; --tilt-y: 0; position: relative; z-index: 2; width: 258px; min-height: 118px; border: 1px solid rgba(150,140,116,.55); border-radius: 13px; background: linear-gradient(178deg, #fffdf8 0%, #fbf7ee 60%, #f7f2e7 100%); box-shadow: 0 1px 0 rgba(255,255,255,.75) inset, var(--card-shadow); display: flex; align-items: center; padding: 12px 13px 13px 14px; gap: 14px; text-align: left; cursor: pointer; overflow: hidden; transform: perspective(900px) rotateX(calc(var(--tilt-x) * 1deg)) rotateY(calc(var(--tilt-y) * 1deg)); transition: border-color .18s ease, transform .12s ease, box-shadow .3s ease; }
+.person-card::before { content: ""; position: absolute; left: 10%; right: 10%; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold) 80%, transparent); opacity: .8; z-index: 1; }
+.person-card::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at calc(50% + var(--tilt-y) * 4%) calc(50% - var(--tilt-x) * 4%), rgba(255,255,255,.5), transparent 60%); opacity: 0; transition: opacity .25s ease; pointer-events: none; }
+.person-card:hover::after { opacity: .5; }
+.person-card:hover { transform: perspective(900px) rotateX(calc(var(--tilt-x) * 1deg)) rotateY(calc(var(--tilt-y) * 1deg)) translateY(-4px) scale(1.018); border-color: rgba(128,144,112,.9); box-shadow: 0 1px 0 rgba(255,255,255,.85) inset, var(--card-shadow-hover); }
 .person-card.is-selected { border-color: var(--terra); box-shadow: 0 0 0 1.5px var(--terra) inset, 0 1px 0 rgba(255,255,255,.7) inset, 0 14px 30px -12px rgba(183,91,56,.4); }
 .person-card.is-dimmed { opacity: .32; filter: saturate(.55); transform: none !important; }
 .person-card.is-dimmed:hover { box-shadow: none; }

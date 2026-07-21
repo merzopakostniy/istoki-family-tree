@@ -171,10 +171,23 @@ function Portrait({ person, className }) {
 }
 
 function PersonCard({ person, selected, focus, onSelect, register }) {
+  const tilt = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const px = (event.clientX - rect.left) / rect.width - .5;
+    const py = (event.clientY - rect.top) / rect.height - .5;
+    event.currentTarget.style.setProperty("--tilt-x", (-py * 10).toFixed(2));
+    event.currentTarget.style.setProperty("--tilt-y", (px * 10).toFixed(2));
+  };
+  const resetTilt = (event) => {
+    event.currentTarget.style.setProperty("--tilt-x", 0);
+    event.currentTarget.style.setProperty("--tilt-y", 0);
+  };
   return (
     <button
       className={`person-card ${selected ? "is-selected" : ""} ${focus === "dim" ? "is-dimmed" : ""} ${focus === "on" ? "is-focused" : ""}`}
       onClick={() => onSelect(person.id)}
+      onMouseMove={tilt}
+      onMouseLeave={resetTilt}
       ref={(node) => register(person.id, node)}
       type="button"
       aria-pressed={selected}
