@@ -207,8 +207,7 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
       <span className="person-copy">
         <strong>{person.name}</strong>
         <span className="person-years">{years(person)}</span>
-        <small className="person-role">{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation || "Член семьи"].filter(Boolean).join(" · ")}</small>
-        <span className="person-generation">{generationMeta.find((item) => item.id === person.generation)?.short || `Поколение ${person.generation + 1}`}</span>
+        {(person.maidenName || person.relation) && <small className="person-role">{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation].filter(Boolean).join(" · ")}</small>}
       </span>
     </button>
   );
