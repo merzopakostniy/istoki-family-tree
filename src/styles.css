@@ -139,7 +139,7 @@ nav { display: flex; align-items: center; gap: 8px; }
 @keyframes familyIn { from { opacity: 0; filter: blur(4px); } }
 .positioned-family.partner-pair::after { content: ""; position: absolute; z-index: -1; inset: -12px -14px; border: 1px dashed var(--family-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
 .positioned-family.no-shared-box::after { display: none; }
-.current-marriage-frame { position: absolute; z-index: -1; top: -12px; height: calc(100% + 24px); border: 1px dashed var(--marriage-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
+.current-marriage-frame { position: absolute; z-index: -1; top: -12px; height: calc(100% + 24px); border: 1px dashed var(--marriage-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .85; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }
 .marriage-rails { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .marriage-rails path { fill: none; stroke: var(--family-color, var(--green)); stroke-width: 2; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
 .marriage-rails circle { fill: var(--surface); stroke: var(--family-color, var(--green)); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -308,7 +308,7 @@ dd { margin: 0; }
 .tree-board { height: calc(100% - 112px); padding: 0 28px 48px; }
 .connections path { stroke-width: 2.1; filter: drop-shadow(0 1px 0 rgba(0,0,0,.34)); }
 .branch-node { fill: #223b2a; stroke: #d5bd7f; }
-.positioned-family.partner-pair::after, .current-marriage-frame { border-color: color-mix(in srgb, var(--family-color, #d5bd7f) 64%, #f5e7c5); background: rgba(251,245,226,.13); box-shadow: 0 16px 30px -22px rgba(0,0,0,.85); }
+.positioned-family.partner-pair::after, .current-marriage-frame { border-width: 1.5px; border-color: color-mix(in srgb, var(--family-color, #e6cd8e) 55%, #f7ecc9); background: rgba(247,238,213,.16); box-shadow: 0 16px 30px -22px rgba(0,0,0,.85), inset 0 0 0 1px rgba(255,250,232,.12); }
 .person-card { width: 258px; min-height: 134px; border-color: #c9af7a; border-radius: 7px; background: #f5eedf; box-shadow: 0 1px 0 rgba(255,255,255,.78) inset, var(--card-shadow); padding: 10px 12px 10px 11px; gap: 12px; overflow: visible; }
 .person-card::before { left: 0; right: auto; top: 11px; width: 3px; height: calc(100% - 22px); border-radius: 0 3px 3px 0; background: var(--gold); opacity: .88; }
 .person-card::after { display: none; }
