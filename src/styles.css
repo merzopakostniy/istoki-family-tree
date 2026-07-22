@@ -182,7 +182,7 @@ nav { display: flex; align-items: center; gap: 8px; }
 .sheet-more { display: none; }
 .detail-heading { display: flex; align-items: center; gap: 14px; padding: 21px 36px 22px 0; border-bottom: 1px solid var(--line); }
 .detail-avatar { width: 66px; height: 88px; flex: 0 0 auto; font-size: 17px; }
-.detail-heading h2 { margin: 0; font: 30px/1.1 Georgia, "Times New Roman", serif; font-weight: 400; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.detail-heading h2 { margin: 0; font: 30px/1.1 Georgia, "Times New Roman", serif; font-weight: 400; letter-spacing: -.02em; overflow-wrap: break-word; word-break: normal; hyphens: none; }
 .detail-heading p { margin: 7px 0 0; color: var(--muted); }
 .detail-section { padding: 20px 0; border-bottom: 1px solid var(--line); }
 .section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -324,7 +324,7 @@ dd { margin: 0; }
 .tree-area.has-detail { margin-right: 376px; }
 .detail-heading { gap: 17px; padding: 26px 38px 25px 0; border-bottom-color: #d7c7a5; }
 .detail-avatar { width: 88px; height: 118px; border-radius: 44% / 38%; border-color: #ead4a5; }
-.detail-heading h2 { font-size: 35px; color: #323329; }
+.detail-heading h2 { font-size: 28px; color: #323329; }
 .detail-heading p { color: #8b5a3e; font-weight: 600; }
 .detail-section { border-bottom-color: #d7c7a5; }
 .section-title h3 { color: #a14e33; letter-spacing: .025em; text-transform: uppercase; font-size: 11px; }
