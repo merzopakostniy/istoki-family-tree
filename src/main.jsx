@@ -298,13 +298,40 @@ function buildFamilyLayout(people) {
   const childGap = (first, second) => first.primaryMarriageKey && first.primaryMarriageKey === second.primaryMarriageKey ? SIBLING_GAP : MARRIAGE_BRANCH_GAP;
   units.forEach((unit) => unit.children.sort((first, second) => branchPosition(unit, first) - branchPosition(unit, second) || first.order - second.order));
 
+  // In-law ancestors: a childless top root that is the parents of a person who married into another unit.
+  // Anchor it above that person instead of pushing it to the far right of the stage.
+  const aboveAttachments = new Map();
+  const anchoredRootIds = new Set();
+  units.forEach((root) => {
+    if (root.primaryParentId || root.children.length) return;
+    const memberIds = new Set(root.people.map((person) => person.id));
+    const child = people.find((person) => !memberIds.has(person.id) && person.parents.some((parentId) => memberIds.has(parentId)));
+    const anchorUnit = child && unitByPersonId.get(child.id);
+    if (!anchorUnit || anchorUnit.id === root.id) return;
+    const index = anchorUnit.people.findIndex((person) => person.id === child.id);
+    if (index < 0) return;
+    if (!aboveAttachments.has(anchorUnit.id)) aboveAttachments.set(anchorUnit.id, []);
+    aboveAttachments.get(anchorUnit.id).push({ unit: root, index });
+    anchoredRootIds.add(root.id);
+  });
+
   const measuring = new Set();
   const measure = (unit) => {
     if (unit.subtreeWidth) return unit.subtreeWidth;
     if (measuring.has(unit.id)) return unit.width;
     measuring.add(unit.id);
     const descendantsWidth = unit.children.reduce((sum, child, index) => sum + measure(child) + (index ? childGap(unit.children[index - 1], child) : 0), 0);
-    unit.subtreeWidth = Math.max(unit.width, descendantsWidth);
+    let subtreeWidth = Math.max(unit.width, descendantsWidth);
+    const coParentUnit = unit.primaryParentId ? unitById.get(unit.primaryParentId) : null;
+    (aboveAttachments.get(unit.id) || []).forEach((attachment) => {
+      const aboveWidth = measure(attachment.unit);
+      // Only reserve room to centre the in-laws over their child when the blood spouse has no
+      // parents on that same row. Otherwise the de-overlap pass parks them beside the blood grandparents.
+      if (coParentUnit && coParentUnit.generation === attachment.unit.generation) return;
+      const spouseCenter = attachment.index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
+      subtreeWidth = Math.max(subtreeWidth, 2 * (Math.abs(spouseCenter - unit.width / 2) + aboveWidth / 2));
+    });
+    unit.subtreeWidth = subtreeWidth;
     measuring.delete(unit.id);
     return unit.subtreeWidth;
   };
@@ -320,46 +347,18 @@ function buildFamilyLayout(people) {
       place(child, childLeft);
       childLeft += child.subtreeWidth;
     });
+    (aboveAttachments.get(unit.id) || []).forEach((attachment) => {
+      const spouseCenter = unit.x + attachment.index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
+      place(attachment.unit, spouseCenter - attachment.unit.subtreeWidth / 2);
+    });
   };
 
-  const topRootOf = (unit) => {
-    let current = unit;
-    const seen = new Set();
-    while (current.primaryParentId && !seen.has(current.id)) {
-      seen.add(current.id);
-      const parent = unitById.get(current.primaryParentId);
-      if (!parent) break;
-      current = parent;
-    }
-    return current;
-  };
-  const roots = units.filter((unit) => !unit.primaryParentId).sort((first, second) => first.order - second.order);
-  const satelliteTrunk = new Map();
-  roots.forEach((root) => {
-    if (root.children.length) return;
-    const memberIds = new Set(root.people.map((person) => person.id));
-    const linkedPerson = people.find((person) => !memberIds.has(person.id) && person.parents.some((parentId) => memberIds.has(parentId)));
-    const linkedUnit = linkedPerson && unitByPersonId.get(linkedPerson.id);
-    if (linkedUnit && linkedUnit.id !== root.id) satelliteTrunk.set(root.id, topRootOf(linkedUnit));
-  });
-  const trunkRoots = roots.filter((root) => !satelliteTrunk.has(root.id));
-  const satellitesByTrunk = new Map();
-  roots.forEach((root) => {
-    const trunk = satelliteTrunk.get(root.id);
-    if (!trunk) return;
-    if (!satellitesByTrunk.has(trunk.id)) satellitesByTrunk.set(trunk.id, []);
-    satellitesByTrunk.get(trunk.id).push(root);
-  });
-  const orderedRoots = [];
-  trunkRoots.forEach((trunk) => {
-    orderedRoots.push(trunk);
-    (satellitesByTrunk.get(trunk.id) || []).forEach((satellite) => orderedRoots.push(satellite));
-  });
-  const orderedIds = new Set(orderedRoots.map((root) => root.id));
-  roots.forEach((root) => { if (!orderedIds.has(root.id)) orderedRoots.push(root); });
-  orderedRoots.forEach(measure);
+  const roots = units
+    .filter((unit) => !unit.primaryParentId && !anchoredRootIds.has(unit.id))
+    .sort((first, second) => first.order - second.order);
+  roots.forEach(measure);
   let cursor = STAGE_PADDING;
-  orderedRoots.forEach((root) => {
+  roots.forEach((root) => {
     place(root, cursor);
     cursor += root.subtreeWidth + ROOT_FAMILY_GAP;
   });
@@ -368,8 +367,43 @@ function buildFamilyLayout(people) {
     place(unit, cursor);
     cursor += unit.subtreeWidth + ROOT_FAMILY_GAP;
   });
+  // De-overlap: an in-law unit placed under its child may sit on top of the blood grandparents'
+  // row. Park it beside them at the nearest clear slot instead of overlapping.
+  const unitsByGeneration = new Map();
+  units.forEach((unit) => {
+    if (!unitsByGeneration.has(unit.generation)) unitsByGeneration.set(unit.generation, []);
+    unitsByGeneration.get(unit.generation).push(unit);
+  });
+  anchoredRootIds.forEach((rootId) => {
+    const inLaw = unitById.get(rootId);
+    if (!inLaw) return;
+    const neighbours = (unitsByGeneration.get(inLaw.generation) || []).filter((unit) => unit.id !== inLaw.id);
+    const overlaps = (x) => neighbours.some((unit) => x < unit.x + unit.width + ROOT_FAMILY_GAP && x + inLaw.width + ROOT_FAMILY_GAP > unit.x);
+    if (!overlaps(inLaw.x)) return;
+    const desired = inLaw.x;
+    let best = null;
+    neighbours.forEach((unit) => {
+      [unit.x + unit.width + ROOT_FAMILY_GAP, unit.x - inLaw.width - ROOT_FAMILY_GAP].forEach((candidate) => {
+        if (overlaps(candidate)) return;
+        if (best === null || Math.abs(candidate - desired) < Math.abs(best - desired)) best = candidate;
+      });
+    });
+    if (best !== null) inLaw.x = best;
+  });
+  // Above-anchored in-law units can reach past the left edge — nudge the whole stage back on screen.
+  let minX = Infinity;
+  let maxRight = 0;
+  units.forEach((unit) => {
+    if (unit.x < minX) minX = unit.x;
+    if (unit.x + unit.width > maxRight) maxRight = unit.x + unit.width;
+  });
+  if (Number.isFinite(minX) && minX < STAGE_PADDING) {
+    const shift = STAGE_PADDING - minX;
+    units.forEach((unit) => { unit.x += shift; });
+    maxRight += shift;
+  }
   const height = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
-  return { units, width: Math.max(940, cursor - ROOT_FAMILY_GAP + STAGE_PADDING), height: Math.max(300, height) };
+  return { units, width: Math.max(940, maxRight + STAGE_PADDING), height: Math.max(300, height) };
 }
 
 function generationLabel(generation) {
