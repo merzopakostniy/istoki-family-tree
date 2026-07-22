@@ -390,6 +390,35 @@ function buildFamilyLayout(people) {
     });
     if (best !== null) inLaw.x = best;
   });
+
+  // Multi-marriage units otherwise centre over the whole brood, dragging an outlier child's parent
+  // far from that child. Slide such a unit over its largest child branch so at least the main line
+  // stays connected; distant marriages just get longer connectors.
+  units.forEach((unit) => {
+    if (unit.people.length < 3 || !unit.children.length) return;
+    const offsetOf = (personId) => {
+      const index = unit.people.findIndex((person) => person.id === personId);
+      return index < 0 ? null : index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
+    };
+    const primaryChild = unit.children.reduce((best, child) => child.subtreeWidth > (best?.subtreeWidth ?? -1) ? child : best, null);
+    const parentOffsets = primaryChild.people.flatMap((person) => person.parents).map(offsetOf).filter((value) => value != null);
+    if (!parentOffsets.length) return;
+    const parentOffset = parentOffsets.reduce((sum, value) => sum + value, 0) / parentOffsets.length;
+    const desiredX = (primaryChild.x + primaryChild.width / 2) - parentOffset;
+    const neighbours = (unitsByGeneration.get(unit.generation) || []).filter((other) => other.id !== unit.id);
+    const clashes = (x) => neighbours.some((other) => x < other.x + other.width + ROOT_FAMILY_GAP && x + unit.width + ROOT_FAMILY_GAP > other.x);
+    if (!clashes(desiredX)) { unit.x = desiredX; return; }
+    const step = desiredX < unit.x ? -4 : 4;
+    let x = unit.x;
+    for (let guard = 0; guard < 4000; guard += 1) {
+      const nextX = x + step;
+      if ((step < 0 && nextX <= desiredX) || (step > 0 && nextX >= desiredX)) break;
+      if (clashes(nextX)) break;
+      x = nextX;
+    }
+    unit.x = x;
+  });
+
   // Above-anchored in-law units can reach past the left edge — nudge the whole stage back on screen.
   let minX = Infinity;
   let maxRight = 0;
