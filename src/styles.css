@@ -163,7 +163,7 @@ nav { display: flex; align-items: center; gap: 8px; }
 .portrait-image { width: 100%; height: 100%; display: block; object-fit: cover; transform-origin: center; }
 .person-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .person-copy strong { font-family: Georgia, "Times New Roman", serif; font-weight: 600; font-size: 15px; line-height: 1.2; letter-spacing: -.01em; color: #23301f; white-space: normal; overflow-wrap: anywhere; }
-.person-years { color: var(--terra); font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+.person-years { color: var(--terra); font-size: 12.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
 .person-copy small { color: var(--muted); font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
 .no-results { position: absolute; inset: 150px 0 auto; text-align: center; color: #a5a794; }
 .empty-tree { position: absolute; inset: 120px 0 auto; margin: auto; width: min(440px, calc(100% - 40px)); display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -309,13 +309,13 @@ dd { margin: 0; }
 .connections path { stroke-width: 2.1; filter: drop-shadow(0 1px 0 rgba(0,0,0,.34)); }
 .branch-node { fill: #223b2a; stroke: #d5bd7f; }
 .positioned-family.partner-pair::after, .current-marriage-frame { border-color: color-mix(in srgb, var(--family-color, #d5bd7f) 64%, #f5e7c5); background: rgba(251,245,226,.13); box-shadow: 0 16px 30px -22px rgba(0,0,0,.85); }
-.person-card { width: 258px; min-height: 126px; border-color: #c9af7a; border-radius: 7px; background: #f5eedf; box-shadow: 0 1px 0 rgba(255,255,255,.78) inset, var(--card-shadow); padding: 10px 12px 10px 11px; gap: 12px; overflow: visible; }
+.person-card { width: 258px; min-height: 134px; border-color: #c9af7a; border-radius: 7px; background: #f5eedf; box-shadow: 0 1px 0 rgba(255,255,255,.78) inset, var(--card-shadow); padding: 10px 12px 10px 11px; gap: 12px; overflow: visible; }
 .person-card::before { left: 0; right: auto; top: 11px; width: 3px; height: calc(100% - 22px); border-radius: 0 3px 3px 0; background: var(--gold); opacity: .88; }
 .person-card::after { display: none; }
 .person-card:hover { border-color: #f0d494; box-shadow: 0 0 0 1px rgba(255,239,196,.35) inset, var(--card-shadow-hover); }
 .person-card.is-selected { border-color: #d07b55; box-shadow: 0 0 0 2px #d07b55 inset, 0 10px 26px -16px rgba(0,0,0,.8); }
 .person-card.is-focused { border-color: #e0bd76; box-shadow: 0 0 0 1.5px #e0bd76 inset, 0 10px 26px -18px rgba(0,0,0,.75); }
-.avatar { width: 69px; height: 96px; border-radius: 48% / 42%; border: 3px solid #e8d4a8; background: #5d6157; box-shadow: 0 0 0 1px #9b8355, 0 5px 11px rgba(39,32,20,.22); }
+.avatar { width: 78px; height: 106px; border-radius: 47% / 41%; border: 4px solid #f0e2c2; background: #5d6157; box-shadow: 0 0 0 1px #b8965a, 0 0 0 2.5px rgba(255,248,228,.55), inset 0 0 0 1px rgba(255,255,255,.35), 0 6px 15px rgba(39,32,20,.28); }
 .person-copy { align-self: stretch; justify-content: center; gap: 4px; padding: 4px 0 3px; }
 .person-copy strong { font-size: 16px; color: #2b3328; }
 .person-years { color: #8b4e35; font-size: 12px; }

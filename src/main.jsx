@@ -214,7 +214,7 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
 }
 
 const CARD_WIDTH = 258;
-const CARD_HEIGHT = 118;
+const CARD_HEIGHT = 134;
 const PARTNER_CONNECTOR_WIDTH = 42;
 const SIBLING_GAP = 44;
 const MARRIAGE_BRANCH_GAP = 104;
