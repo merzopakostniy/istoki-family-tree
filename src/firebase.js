@@ -22,7 +22,7 @@ const peopleCollection = collection(db, "trees", "main", "people");
 const PERSON_FIELDS = [
   "id", "name", "birth", "death", "relation", "generation", "parents", "partnerIds", "currentPartnerId", "formerPartnerIds",
   "birthplace", "deathplace", "maidenName", "manualGeneration", "note", "photo",
-  "photoX", "photoY", "photoScale", "manualX", "manualY",
+  "photoX", "photoY", "photoScale", "manualX", "manualY", "manualPositionVersion",
 ];
 
 export function isOwnerUser(user) {

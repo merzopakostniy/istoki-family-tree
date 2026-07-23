@@ -10,7 +10,7 @@ rules_version = '2';
 // Required fields:
 // id, name, birth, death, relation, generation, parents, partnerIds, currentPartnerId, formerPartnerIds,
 // birthplace, deathplace, maidenName, manualGeneration, note, photo,
-// photoX, photoY, photoScale, manualX, manualY.
+// photoX, photoY, photoScale, manualX, manualY, manualPositionVersion.
 //
 // Visitors may read the public tree. Only the verified owner Google account
 // may create, update, or delete records.
@@ -41,7 +41,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'id', 'name', 'birth', 'death', 'relation', 'generation',
           'parents', 'partnerIds', 'currentPartnerId', 'formerPartnerIds', 'birthplace', 'deathplace', 'maidenName',
-          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale', 'manualX', 'manualY'
+          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale', 'manualX', 'manualY', 'manualPositionVersion'
         ]) &&
         data.id is string && data.id == personId && data.id.size() > 0 && data.id.size() <= 160 &&
         data.name is string && data.name.size() > 0 && data.name.size() <= 240 &&
@@ -63,7 +63,9 @@ service cloud.firestore {
         data.photoY is number && data.photoY >= 0 && data.photoY <= 100 &&
         data.photoScale is number && data.photoScale >= 1 && data.photoScale <= 2 &&
         (data.manualX == null || (data.manualX is number && data.manualX >= -100000 && data.manualX <= 100000)) &&
-        (data.manualY == null || (data.manualY is number && data.manualY >= -100000 && data.manualY <= 100000));
+        (data.manualY == null || (data.manualY is number && data.manualY >= -100000 && data.manualY <= 100000)) &&
+        (!('manualPositionVersion' in data) ||
+          (data.manualPositionVersion is int && data.manualPositionVersion >= 0 && data.manualPositionVersion <= 2));
     }
 
     match /trees/main/people/{personId} {

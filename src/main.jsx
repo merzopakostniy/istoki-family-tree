@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { onAuthStateChanged } from "firebase/auth";
 import { generationMeta } from "./data";
 import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPeople } from "./firebase";
+import { buildFamilyLayout as buildHierarchyLayout, MANUAL_POSITION_VERSION } from "./layout";
 import "./styles.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
@@ -59,6 +60,7 @@ function normalizePerson(person) {
     manualGeneration: Boolean(clean.manualGeneration),
     manualX: Number.isFinite(clean.manualX) ? clean.manualX : null,
     manualY: Number.isFinite(clean.manualY) ? clean.manualY : null,
+    manualPositionVersion: Number.isFinite(clean.manualPositionVersion) ? clean.manualPositionVersion : 0,
     note: clean.note || "",
     photo: clean.photo || "",
     photoX: Number.isFinite(clean.photoX) ? clean.photoX : 50,
@@ -95,44 +97,6 @@ function normalizePeople(people) {
     });
   }
   return normalized;
-}
-
-function groupPartnerUnits(people) {
-  const byId = new Map(people.map((person) => [person.id, person]));
-  const seen = new Set();
-  const units = [];
-  people.forEach((person) => {
-    if (seen.has(person.id)) return;
-    const component = [];
-    const queue = [person];
-    while (queue.length) {
-      const current = queue.shift();
-      if (!current || seen.has(current.id)) continue;
-      seen.add(current.id);
-      component.push(current);
-      current.partnerIds.forEach((id) => { if (byId.has(id) && !seen.has(id)) queue.push(byId.get(id)); });
-    }
-    if (component.length < 3) {
-      units.push(component);
-      return;
-    }
-    const anchor = component.reduce((best, item) => item.partnerIds.length > best.partnerIds.length ? item : best, component[0]);
-    const partners = component.filter((item) => anchor.partnerIds.includes(item.id));
-    const currentPartner = partners.find((item) => anchor.currentPartnerId === item.id || item.currentPartnerId === anchor.id);
-    const leftPartner = currentPartner?.id === partners[0]?.id ? currentPartner : partners[0] || currentPartner;
-    const rightPartners = currentPartner
-      ? (leftPartner?.id === currentPartner.id
-        ? partners.filter((item) => item.id !== currentPartner.id)
-        : [currentPartner, ...partners.filter((item) => item.id !== currentPartner.id && item.id !== leftPartner?.id)])
-      : partners.slice(1);
-    const remaining = component.filter((item) => item.id !== anchor.id && !anchor.partnerIds.includes(item.id));
-    units.push([leftPartner, anchor, ...rightPartners, ...remaining].filter(Boolean));
-  });
-  return units;
-}
-
-function arePartners(first, second) {
-  return first.partnerIds.includes(second.id) || second.partnerIds.includes(first.id);
 }
 
 function relationshipLabel(person, relative) {
@@ -244,7 +208,7 @@ function familyUnitWidth(people) {
 }
 
 function buildFamilyLayout(people) {
-  if (!people.length) return { units: [], width: 940, height: EMPTY_STAGE_HEIGHT };
+  if (!people.length) return { units: [], cards: [], width: 940, height: EMPTY_STAGE_HEIGHT };
   const sourceOrder = new Map(people.map((person, index) => [person.id, index]));
   const generations = [...new Set(people.map((person) => person.generation))].sort((first, second) => second - first);
   const highestGeneration = generations[0];
@@ -473,29 +437,57 @@ function buildFamilyLayout(people) {
 
   // normalise to stage padding
   let minX = Infinity;
-  let maxRight = 0;
-  units.forEach((unit) => { if (unit.x < minX) minX = unit.x; if (unit.x + unit.width > maxRight) maxRight = unit.x + unit.width; });
+  units.forEach((unit) => { if (unit.x < minX) minX = unit.x; });
   if (Number.isFinite(minX)) {
     const shift = STAGE_PADDING - minX;
     units.forEach((unit) => { unit.x += shift; });
-    maxRight += shift;
   }
-  // ── Manual overrides: any unit whose members carry a hand-placed position wins over auto-layout.
-  // The owner drags families freely; connectors follow because they are drawn from live DOM rects. ──
+  // Cards are laid out as a family only for the initial automatic arrangement. Every person gets
+  // their own final coordinates so partners can later be moved independently.
+  const cards = [];
   units.forEach((unit) => {
-    const placed = unit.people.find((person) => Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
-    if (placed) { unit.x = placed.manualX; unit.y = placed.manualY; unit.manual = true; }
+    const gaps = unit.gaps || [];
+    const cardLeft = (index) => index * CARD_WIDTH + gaps.slice(0, index).reduce((sum, value) => sum + value, 0);
+    const manualGroups = new Map();
+    unit.people.forEach((person) => {
+      if (!Number.isFinite(person.manualX) || !Number.isFinite(person.manualY)) return;
+      const key = `${person.manualX}:${person.manualY}`;
+      if (!manualGroups.has(key)) manualGroups.set(key, []);
+      manualGroups.get(key).push(person.id);
+    });
+    // The previous drag implementation stored the same top-left coordinate on every spouse.
+    // Interpret exact duplicates as that legacy family position so existing saved trees do not
+    // suddenly stack all spouses on top of one another after this upgrade.
+    const legacyPositions = new Map();
+    manualGroups.forEach((ids) => {
+      if (ids.length < 2) return;
+      const source = unit.people.find((person) => person.id === ids[0]);
+      ids.forEach((id) => {
+        const index = unit.people.findIndex((person) => person.id === id);
+        legacyPositions.set(id, { x: source.manualX + cardLeft(index), y: source.manualY });
+      });
+    });
+    unit.people.forEach((person, index) => {
+      const legacy = legacyPositions.get(person.id);
+      const hasManualPosition = Number.isFinite(person.manualX) && Number.isFinite(person.manualY);
+      cards.push({
+        person,
+        x: legacy?.x ?? (hasManualPosition ? person.manualX : unit.x + cardLeft(index)),
+        y: legacy?.y ?? (hasManualPosition ? person.manualY : unit.y),
+      });
+    });
   });
 
   let autoHeight = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
   let width = 0;
   let heightFromUnits = 0;
-  units.forEach((unit) => {
-    if (unit.x + unit.width > width) width = unit.x + unit.width;
-    if (unit.y + CARD_HEIGHT > heightFromUnits) heightFromUnits = unit.y + CARD_HEIGHT;
+  cards.forEach((card) => {
+    if (card.x + CARD_WIDTH > width) width = card.x + CARD_WIDTH;
+    if (card.y + CARD_HEIGHT > heightFromUnits) heightFromUnits = card.y + CARD_HEIGHT;
   });
   return {
     units,
+    cards,
     width: Math.max(940, width + STAGE_PADDING),
     height: Math.max(300, autoHeight, heightFromUnits + STAGE_BOTTOM),
   };
@@ -505,93 +497,66 @@ function generationLabel(generation) {
   return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
 }
 
-function FamilyUnit({ unit, selectedId, focusIds, onSelect, register, canManage, scale, onDragEnd }) {
+function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canManage, scale, onDragEnd }) {
   const [drag, setDrag] = useState(null);
-  const dragState = useRef(null);
   const draggedRef = useRef(false);
+  const redrawFrame = useRef(null);
+  const clickResetTimer = useRef(null);
+  useEffect(() => () => {
+    cancelAnimationFrame(redrawFrame.current);
+    clearTimeout(clickResetTimer.current);
+  }, []);
+  const redrawConnections = () => {
+    cancelAnimationFrame(redrawFrame.current);
+    redrawFrame.current = requestAnimationFrame(() => window.dispatchEvent(new Event("family-layout-change")));
+  };
   const beginDrag = (event) => {
-    if (!canManage || event.button !== 0) return;
-    const start = { x: event.clientX, y: event.clientY, moved: false };
-    dragState.current = start;
+    if (!canManage || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.preventDefault();
+    const start = { x: event.clientX, y: event.clientY, moved: false, pointerId: event.pointerId };
     const onMove = (moveEvent) => {
+      if (moveEvent.pointerId !== start.pointerId) return;
       const dx = (moveEvent.clientX - start.x) / (scale || 1);
       const dy = (moveEvent.clientY - start.y) / (scale || 1);
       if (!start.moved && Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 4) return;
       start.moved = true;
       draggedRef.current = true;
       setDrag({ dx, dy });
+      redrawConnections();
     };
     const onUp = (upEvent) => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      if (upEvent.pointerId !== start.pointerId) return;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
       if (start.moved) {
         const dx = (upEvent.clientX - start.x) / (scale || 1);
         const dy = (upEvent.clientY - start.y) / (scale || 1);
-        onDragEnd(unit, Math.max(0, unit.x + dx), Math.max(0, unit.y + dy));
+        onDragEnd(card.person.id, Math.max(0, card.x + dx), Math.max(0, card.y + dy));
+        clickResetTimer.current = setTimeout(() => { draggedRef.current = false; }, 0);
       }
       setDrag(null);
+      redrawConnections();
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
   };
   const suppressClickAfterDrag = (event) => {
     if (draggedRef.current) { event.stopPropagation(); event.preventDefault(); draggedRef.current = false; }
   };
-  const left = unit.x + (drag?.dx || 0);
-  const top = unit.y + (drag?.dy || 0);
-  const anchor = unit.people.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, unit.people[0]);
-  const anchorIndex = unit.people.findIndex((person) => person.id === anchor.id);
-  const extraMarriages = anchor.partnerIds
-    .map((partnerId) => unit.people.findIndex((person) => person.id === partnerId))
-    .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
-  const gaps = unit.gaps || [];
-  const cardLeft = (index) => index * CARD_WIDTH + gaps.slice(0, index).reduce((sum, value) => sum + value, 0);
-  const gapCenter = (leftIndex) => cardLeft(leftIndex) + CARD_WIDTH + (gaps[leftIndex] ?? PARTNER_CONNECTOR_WIDTH) / 2;
-  const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
-  const currentMarriage = unit.people
-    .map((person) => [person, unit.people.find((item) => item.id === person.currentPartnerId)])
-    .find(([person, partner]) => partner && arePartners(person, partner));
-  const currentMarriageIndices = currentMarriage
-    ? [unit.people.findIndex((person) => person.id === currentMarriage[0].id), unit.people.findIndex((person) => person.id === currentMarriage[1].id)].sort((first, second) => first - second)
-    : null;
-  const currentMarriageFrame = currentMarriageIndices && currentMarriageIndices[1] - currentMarriageIndices[0] === 1
-    ? {
-      left: `${cardLeft(currentMarriageIndices[0]) - 14}px`,
-      width: `${cardLeft(currentMarriageIndices[1]) + CARD_WIDTH - cardLeft(currentMarriageIndices[0]) + 28}px`,
-      "--marriage-color": branchColor(marriageKey(currentMarriage[0].id, currentMarriage[1].id)),
-    }
-    : null;
-  const hasMarriageStatus = unit.people.some((person) => person.currentPartnerId || person.formerPartnerIds.length);
+  const person = card.person;
+  const left = card.x + (drag?.dx || 0);
+  const top = card.y + (drag?.dy || 0);
   return (
     <div
-      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${hasMarriageStatus ? "no-shared-box" : ""} ${canManage ? "draggable" : ""} ${drag ? "is-dragging" : ""}`}
-      style={{ left: `${left}px`, top: `${top}px`, "--family-color": unitColor }}
-      data-family={unit.id}
-      onMouseDown={beginDrag}
+      className={`positioned-person ${canManage ? "draggable" : ""} ${drag ? "is-dragging" : ""}`}
+      style={{ left: `${left}px`, top: `${top}px` }}
+      data-person-id={person.id}
+      onPointerDown={beginDrag}
       onClickCapture={suppressClickAfterDrag}
     >
-      {currentMarriageFrame ? <span className="current-marriage-frame" style={currentMarriageFrame} aria-hidden="true"/> : null}
-      {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
-        {extraMarriages.map((partnerIndex) => {
-          const lowIndex = Math.min(anchorIndex, partnerIndex);
-          const highIndex = Math.max(anchorIndex, partnerIndex);
-          const gaps = [];
-          for (let index = lowIndex; index < highIndex; index += 1) gaps.push(gapCenter(index));
-          const partner = unit.people[partnerIndex];
-          const gapHalf = PARTNER_CONNECTOR_WIDTH / 2 - 3;
-          return <g key={partner.id} className="marriage-rail" style={{ "--family-color": branchColor(marriageKey(anchor.id, partner.id)) }}>
-            {gaps.map((gapX) => <React.Fragment key={gapX}>
-              <path d={`M ${gapX - gapHalf} ${CARD_HEIGHT / 2} H ${gapX + gapHalf}`}/>
-              <circle cx={gapX - 4} cy={CARD_HEIGHT / 2} r="4.5"/>
-              <circle cx={gapX + 4} cy={CARD_HEIGHT / 2} r="4.5"/>
-            </React.Fragment>)}
-          </g>;
-        })}
-      </svg> : null}
-      {unit.people.map((person, index) => <React.Fragment key={person.id}>
-        {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" style={{ width: `${gaps[index - 1] ?? PARTNER_CONNECTOR_WIDTH}px`, "--family-color": branchColor(marriageKey(unit.people[index - 1].id, person.id)) }} role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer" style={{ width: `${gaps[index - 1] ?? PARTNER_CONNECTOR_WIDTH}px` }}/> : null}
-        <PersonCard person={person} selected={person.id === selectedId} focus={focusIds ? (focusIds.has(person.id) ? (person.id === selectedId ? "" : "on") : "dim") : ""} onSelect={onSelect} register={register}/>
-      </React.Fragment>)}
+      <PersonCard person={person} selected={person.id === selectedId} focus={focusIds ? (focusIds.has(person.id) ? (person.id === selectedId ? "" : "on") : "dim") : ""} onSelect={onSelect} register={register}/>
     </div>
   );
 }
@@ -634,7 +599,7 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
       </section>
       {canEdit && <section className="placement-section">
         <div className="section-title"><h3>Расположение карточки</h3></div>
-        <p>Супруги перемещаются вместе.</p>
+        <p>Эта карточка перемещается отдельно от всех остальных.</p>
         <div className="placement-controls">
           <button onClick={() => onMove("left")}><Icon name="arrowLeft" size={17}/>Влево</button>
           <button onClick={() => onMove("right")}>Вправо<Icon name="arrowRight" size={17}/></button>
@@ -796,22 +761,36 @@ function ConfirmDelete({ person, onConfirm, onClose }) {
 
 function TreeConnections({ people, nodes, stage, scale, selectedId }) {
   const [paths, setPaths] = useState([]);
+  const [marriages, setMarriages] = useState([]);
   useLayoutEffect(() => {
     const draw = () => {
       const stageNode = stage.current;
       if (!stageNode) return;
       const base = stageNode.getBoundingClientRect();
-      const point = (id, side) => {
+      const peopleById = new Map(people.map((person) => [person.id, person]));
+      const box = (id) => {
         const rect = nodes.current.get(id)?.getBoundingClientRect();
         if (!rect) return null;
         return {
-          x: (rect.left - base.left + rect.width / 2) / scale,
-          y: (side === "top" ? rect.top - base.top : side === "center" ? rect.top - base.top + rect.height / 2 : rect.bottom - base.top) / scale,
+          left: (rect.left - base.left) / scale,
+          right: (rect.right - base.left) / scale,
+          top: (rect.top - base.top) / scale,
+          bottom: (rect.bottom - base.top) / scale,
+          centerX: (rect.left - base.left + rect.width / 2) / scale,
+          centerY: (rect.top - base.top + rect.height / 2) / scale,
+        };
+      };
+      const point = (id, side) => {
+        const rect = box(id);
+        if (!rect) return null;
+        return {
+          x: rect.centerX,
+          y: side === "top" ? rect.top : side === "center" ? rect.centerY : rect.bottom,
         };
       };
       const parentOrigin = (parentIds) => {
         if (parentIds.length === 1) return point(parentIds[0], "top");
-        const parentPeople = parentIds.map((id) => people.find((person) => person.id === id)).filter(Boolean);
+        const parentPeople = parentIds.map((id) => peopleById.get(id)).filter(Boolean);
         const anchor = parentPeople.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, parentPeople[0]);
         const partner = parentPeople.find((person) => person.id !== anchor?.id);
         const anchorRect = anchor ? nodes.current.get(anchor.id)?.getBoundingClientRect() : null;
@@ -887,18 +866,77 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds, childIds: route.childIds, distant };
       });
       setPaths(next);
+
+      const seenMarriages = new Set();
+      const nextMarriages = [];
+      people.forEach((person) => person.partnerIds.forEach((partnerId) => {
+        const id = marriageKey(person.id, partnerId);
+        if (seenMarriages.has(id)) return;
+        seenMarriages.add(id);
+        const partner = peopleById.get(partnerId);
+        const first = box(person.id);
+        const second = box(partnerId);
+        if (!partner || !first || !second) return;
+        const dx = second.centerX - first.centerX;
+        const dy = second.centerY - first.centerY;
+        let from;
+        let to;
+        let d;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          from = { x: dx >= 0 ? first.right : first.left, y: first.centerY };
+          to = { x: dx >= 0 ? second.left : second.right, y: second.centerY };
+          const midX = (from.x + to.x) / 2;
+          d = `M ${from.x} ${from.y} H ${midX} V ${to.y} H ${to.x}`;
+        } else {
+          from = { x: first.centerX, y: dy >= 0 ? first.bottom : first.top };
+          to = { x: second.centerX, y: dy >= 0 ? second.top : second.bottom };
+          const midY = (from.y + to.y) / 2;
+          d = `M ${from.x} ${from.y} V ${midY} H ${to.x} V ${to.y}`;
+        }
+        nextMarriages.push({
+          id,
+          d,
+          color: branchColor(id),
+          nodeX: (from.x + to.x) / 2,
+          nodeY: (from.y + to.y) / 2,
+          current: person.currentPartnerId === partnerId || partner.currentPartnerId === person.id,
+          former: person.formerPartnerIds.includes(partnerId) || partner.formerPartnerIds.includes(person.id),
+          people: [person.id, partnerId],
+        });
+      }));
+      setMarriages(nextMarriages);
     };
     const frame = requestAnimationFrame(draw);
     const observer = new ResizeObserver(draw);
     if (stage.current) observer.observe(stage.current);
     nodes.current.forEach((node) => observer.observe(node));
     window.addEventListener("resize", draw);
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener("resize", draw); };
+    window.addEventListener("family-layout-change", draw);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", draw);
+      window.removeEventListener("family-layout-change", draw);
+    };
   }, [people, nodes, stage, scale]);
   const selectedPerson = selectedId ? people.find((person) => person.id === selectedId) : null;
   const flowIds = selectedPerson ? new Set([selectedPerson.id]) : null;
   return (
     <svg className="connections" aria-hidden="true">
+      {marriages.map((marriage) => {
+        const isFocused = flowIds && marriage.people.some((id) => flowIds.has(id));
+        return (
+          <g
+            key={marriage.id}
+            className={`marriage-connection ${marriage.current ? "is-current" : ""} ${marriage.former ? "is-former" : ""} ${flowIds && !isFocused ? "is-dimmed-line" : ""}`}
+            style={{ "--branch-color": marriage.color }}
+          >
+            <path d={marriage.d} className="marriage-line"/>
+            <circle cx={marriage.nodeX - 4} cy={marriage.nodeY} r="4.5"/>
+            <circle cx={marriage.nodeX + 4} cy={marriage.nodeY} r="4.5"/>
+          </g>
+        );
+      })}
       {paths.map((path) => {
         const isFlow = flowIds ? path.parentIds.some((id) => flowIds.has(id)) || (!selectedPerson.partnerIds.length && path.childIds.includes(selectedPerson.id)) : false;
         const isDim = flowIds ? !isFlow : false;
@@ -1025,26 +1063,41 @@ function App() {
   };
 
   const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const familyLayout = buildFamilyLayout(visiblePeople);
+  const familyLayout = buildHierarchyLayout(visiblePeople);
   const stageWidth = familyLayout.width;
   const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
-  const hasManualLayout = people.some((person) => Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
-  const handleUnitDrag = (unit, x, y) => {
-    const ids = new Set(unit.people.map((person) => person.id));
-    commitPeople((current) => current.map((person) => ids.has(person.id) ? { ...person, manualX: x, manualY: y } : person), "Расположение сохранено");
+  const hasManualLayout = people.some((person) => person.manualPositionVersion === MANUAL_POSITION_VERSION && Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
+  const handlePersonDrag = (id, x, y) => {
+    commitPeople((current) => current.map((person) => person.id === id ? {
+      ...person,
+      manualX: x,
+      manualY: y,
+      manualPositionVersion: MANUAL_POSITION_VERSION,
+    } : person), "Расположение сохранено");
   };
-  const resetLayout = () => commitPeople((current) => current.map((person) => ({ ...person, manualX: null, manualY: null })), "Раскладка сброшена");
+  const resetLayout = () => commitPeople((current) => current.map((person) => ({
+    ...person,
+    manualX: null,
+    manualY: null,
+    manualPositionVersion: 0,
+  })), "Раскладка сброшена");
   const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
     if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior });
   };
-  const fitTree = () => {
+  const treeScale = (comfortable = false) => {
     const board = boardRef.current;
-    if (!board) return;
+    if (!board) return null;
     const widthScale = (board.clientWidth - 40) / stageWidth;
     const heightScale = (board.clientHeight - 40) / familyLayout.height;
-    const fittedScale = Math.max(.08, Math.min(1, widthScale, heightScale));
-    setScale(+fittedScale.toFixed(2));
+    const fittedScale = comfortable
+      ? Math.max(.42, Math.min(.72, heightScale))
+      : Math.max(.08, Math.min(1, widthScale, heightScale));
+    return +fittedScale.toFixed(2);
+  };
+  const fitTree = () => {
+    const fittedScale = treeScale(false);
+    if (fittedScale != null) setScale(fittedScale);
   };
   const didAutoFit = useRef(false);
   useEffect(() => {
@@ -1052,7 +1105,10 @@ function App() {
     const board = boardRef.current;
     if (!board || !board.clientWidth) return;
     didAutoFit.current = true;
-    const frame = requestAnimationFrame(() => fitTree());
+    const frame = requestAnimationFrame(() => {
+      const comfortableScale = treeScale(true);
+      if (comfortableScale != null) setScale(comfortableScale);
+    });
     return () => cancelAnimationFrame(frame);
   }, [people.length, stageWidth, familyLayout.height]);
   useEffect(() => { setSheetExpanded(false); }, [selectedId]);
@@ -1073,7 +1129,7 @@ function App() {
       board.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [selectedId, people]);
+  }, [selectedId]);
   const savePerson = (draft) => {
     const normalizedDraft = normalizePerson(draft);
     if (draft.id) {
@@ -1109,35 +1165,23 @@ function App() {
     setEditor(false);
   };
   const movePerson = (id, direction) => {
+    const card = familyLayout.cards.find((item) => item.person.id === id);
+    if (!card) return;
+    const step = 40;
+    const offset = {
+      left: [-step, 0],
+      right: [step, 0],
+      up: [0, -step],
+      down: [0, step],
+    }[direction];
+    if (!offset) return;
     commitPeople((current) => {
-      const person = current.find((item) => item.id === id);
-      if (!person) return current;
-      const byId = new Map(current.map((item) => [item.id, item]));
-      const familyIds = new Set();
-      const queue = [person.id];
-      while (queue.length) {
-        const familyId = queue.shift();
-        if (familyIds.has(familyId)) continue;
-        familyIds.add(familyId);
-        byId.get(familyId)?.partnerIds.forEach((partnerId) => { if (!familyIds.has(partnerId)) queue.push(partnerId); });
-      }
-
-      if (direction === "up" || direction === "down") {
-        const step = direction === "up" ? 1 : -1;
-        const generation = Math.max(0, person.generation + step);
-        if (generation === person.generation) return current;
-        return current.map((item) => familyIds.has(item.id) ? { ...item, generation, manualGeneration: true } : item);
-      }
-
-      const row = current.filter((item) => item.generation === person.generation);
-      const units = groupPartnerUnits(row);
-      const unitIndex = units.findIndex((unit) => unit.some((item) => familyIds.has(item.id)));
-      const nextIndex = direction === "left" ? unitIndex - 1 : unitIndex + 1;
-      if (unitIndex < 0 || nextIndex < 0 || nextIndex >= units.length) return current;
-      [units[unitIndex], units[nextIndex]] = [units[nextIndex], units[unitIndex]];
-      const reordered = units.flat();
-      let rowIndex = 0;
-      return current.map((item) => item.generation === person.generation ? reordered[rowIndex++] : item);
+      return current.map((person) => person.id === id ? {
+        ...person,
+        manualX: Math.max(0, card.x + offset[0]),
+        manualY: Math.max(0, card.y + offset[1]),
+        manualPositionVersion: MANUAL_POSITION_VERSION,
+      } : person);
     }, "Расположение карточки изменено");
   };
   const deletePerson = () => {
@@ -1197,8 +1241,13 @@ function App() {
                     {canManage ? <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button> : <button className="button ghost" onClick={handleOwnerAccess}><Icon name="cloud"/>Войти владельцу</button>}
                   </div>
                 ) : <>
+                {familyLayout.generations.map((row) => (
+                  <div className="generation-guide" key={row.generation} style={{ top: `${row.y - 24}px` }} aria-hidden="true">
+                    <span>{generationLabel(row.generation)}</span>
+                  </div>
+                ))}
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale} selectedId={selectedId}/>
-                {familyLayout.units.map((unit) => <FamilyUnit key={unit.id} unit={unit} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} onDragEnd={handleUnitDrag}/>)}
+                {familyLayout.cards.map((card) => <PositionedPerson key={card.person.id} card={card} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} onDragEnd={handlePersonDrag}/>)}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
                 </>}
               </div>
