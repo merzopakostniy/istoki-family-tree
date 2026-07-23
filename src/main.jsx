@@ -4,6 +4,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { generationMeta } from "./data";
 import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPeople } from "./firebase";
 import { buildCanvasFrame, buildFamilyLayout as buildHierarchyLayout, DEFAULT_CANVAS_MARGIN, MANUAL_POSITION_VERSION } from "./layout";
+import { searchFamilyBranch, selectionFocusIds } from "./relations";
 import "./styles.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
@@ -908,15 +909,14 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
     };
   }, [people, nodes, stage, scale]);
   const selectedPerson = selectedId ? people.find((person) => person.id === selectedId) : null;
-  const flowIds = selectedPerson ? new Set([selectedPerson.id]) : null;
   return (
     <svg className="connections" aria-hidden="true">
       {marriages.map((marriage) => {
-        const isFocused = flowIds && marriage.people.some((id) => flowIds.has(id));
+        const isFocused = selectedPerson && marriage.people.includes(selectedPerson.id);
         return (
           <g
             key={marriage.id}
-            className={`marriage-connection ${marriage.current ? "is-current" : ""} ${marriage.former ? "is-former" : ""} ${flowIds && !isFocused ? "is-dimmed-line" : ""}`}
+            className={`marriage-connection ${marriage.current ? "is-current" : ""} ${marriage.former ? "is-former" : ""} ${isFocused ? "is-focused" : ""} ${selectedPerson && !isFocused ? "is-dimmed-line" : ""}`}
             style={{ "--branch-color": marriage.color }}
           >
             <path d={marriage.d} className="marriage-line"/>
@@ -926,8 +926,10 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         );
       })}
       {paths.map((path) => {
-        const isFlow = flowIds ? path.parentIds.some((id) => flowIds.has(id)) || (!selectedPerson.partnerIds.length && path.childIds.includes(selectedPerson.id)) : false;
-        const isDim = flowIds ? !isFlow : false;
+        const isFlow = selectedPerson
+          ? path.parentIds.includes(selectedPerson.id) || path.childIds.includes(selectedPerson.id)
+          : false;
+        const isDim = selectedPerson ? !isFlow : false;
         const classes = [isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : "", path.distant && !isFlow ? "is-distant" : ""].filter(Boolean).join(" ");
         return (
           <g key={path.id} className={classes} style={{ "--branch-color": path.color }}>
@@ -965,12 +967,7 @@ function App() {
   const boardRef = useRef(null);
   const nodeRefs = useRef(new Map());
   const selected = people.find((person) => person.id === selectedId) || null;
-  const focusIds = selected ? new Set([
-    selected.id,
-    ...selected.partnerIds,
-    ...people.filter((person) => person.parents.includes(selected.id)).map((person) => person.id),
-    ...(selected.partnerIds.length ? [] : selected.parents),
-  ]) : null;
+  const focusIds = selectionFocusIds(people, selectedId);
   const ownerSignedIn = isOwnerUser(authUser);
   const migrationNeeded = cloudState === "empty" && initialLocalPeople.current.length > 0;
   const canManage = ownerSignedIn && cloudState !== "loading" && cloudState !== "error" && !migrationNeeded;
@@ -1050,7 +1047,9 @@ function App() {
     }
   };
 
-  const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const searchResult = searchFamilyBranch(people, query);
+  const visiblePeople = searchResult.visiblePeople;
+  const searchMatchIds = searchResult.matchIds;
   const familyLayout = buildHierarchyLayout(visiblePeople);
   const canvasFrame = buildCanvasFrame(familyLayout, DEFAULT_CANVAS_MARGIN);
   const canvasOffsetX = canvasFrame.offsetX;
@@ -1139,6 +1138,24 @@ function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedId]);
+  useEffect(() => {
+    if (!query.trim() || !searchMatchIds.size) return;
+    const frame = requestAnimationFrame(() => {
+      const board = boardRef.current;
+      if (!board) return;
+      const matches = [...searchMatchIds]
+        .map((id) => nodeRefs.current.get(id))
+        .filter(Boolean)
+        .map((node) => ({ node, rect: node.getBoundingClientRect() }));
+      if (!matches.length) return;
+      const lowest = matches.reduce((best, item) => item.rect.bottom > best.rect.bottom ? item : best);
+      const boardRect = board.getBoundingClientRect();
+      const left = board.scrollLeft + lowest.rect.left + lowest.rect.width / 2 - boardRect.left - board.clientWidth / 2;
+      const top = board.scrollTop + lowest.rect.bottom - boardRect.top - board.clientHeight + 96;
+      board.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [query, visiblePeople.length, scale]);
   const savePerson = (draft) => {
     const normalizedDraft = normalizePerson(draft);
     if (draft.id) {
@@ -1252,7 +1269,7 @@ function App() {
                 ) : <>
                 {familyLayout.clusters.map((cluster) => (
                   <div
-                    className="family-cluster"
+                    className={`family-cluster ${focusIds && !cluster.people.some((person) => focusIds.has(person.id)) ? "is-dimmed" : ""}`}
                     key={cluster.id}
                     style={{
                       "--family-color": branchColor(cluster.id),
