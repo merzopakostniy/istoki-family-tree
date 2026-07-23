@@ -8,6 +8,7 @@ export const STAGE_BOTTOM = 82;
 export const EMPTY_STAGE_HEIGHT = 770;
 export const MANUAL_POSITION_VERSION = 2;
 export const DEFAULT_CANVAS_MARGIN = 1200;
+export const DEFAULT_CANVAS_VERTICAL_MARGIN = 260;
 
 const SIBLING_UNIT_GAP = 30;
 const BRANCH_UNIT_GAP = 68;
@@ -264,13 +265,18 @@ function alignGenerationFamilies(rows, unitByPersonId, generations) {
   });
 }
 
-export function buildCanvasFrame(layout, margin = DEFAULT_CANVAS_MARGIN) {
-  const safeMargin = Math.max(0, margin);
+export function buildCanvasFrame(
+  layout,
+  horizontalMargin = DEFAULT_CANVAS_MARGIN,
+  verticalMargin = DEFAULT_CANVAS_VERTICAL_MARGIN,
+) {
+  const safeHorizontalMargin = Math.max(0, horizontalMargin);
+  const safeVerticalMargin = Math.max(0, verticalMargin);
   return {
-    offsetX: safeMargin - layout.contentLeft,
-    offsetY: safeMargin - layout.contentTop,
-    width: Math.max(MIN_STAGE_WIDTH, layout.contentWidth + safeMargin * 2),
-    height: Math.max(EMPTY_STAGE_HEIGHT, layout.contentHeight + safeMargin * 2),
+    offsetX: safeHorizontalMargin - layout.contentLeft,
+    offsetY: safeVerticalMargin - layout.contentTop,
+    width: Math.max(MIN_STAGE_WIDTH, layout.contentWidth + safeHorizontalMargin * 2),
+    height: Math.max(EMPTY_STAGE_HEIGHT, layout.contentHeight + safeVerticalMargin * 2),
   };
 }
 
@@ -328,9 +334,9 @@ export function buildFamilyLayout(people) {
     });
   }));
 
-  const contentLeft = Math.min(...cards.map((card) => card.x), ...units.map((unit) => unit.x));
-  const contentTop = Math.min(...cards.map((card) => card.y), ...units.map((unit) => unit.y));
-  const contentRight = Math.max(...cards.map((card) => card.x + CARD_WIDTH), ...units.map((unit) => unit.x + unit.width));
+  const contentLeft = Math.min(...cards.map((card) => card.x));
+  const contentTop = Math.min(...cards.map((card) => card.y));
+  const contentRight = Math.max(...cards.map((card) => card.x + CARD_WIDTH));
   const contentBottom = Math.max(...cards.map((card) => card.y + CARD_HEIGHT));
   const contentWidth = contentRight - contentLeft;
   const contentHeight = contentBottom - contentTop;

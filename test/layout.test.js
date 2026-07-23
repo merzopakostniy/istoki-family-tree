@@ -148,9 +148,32 @@ test("current manual coordinates can extend the canvas left and upward", () => {
   assert.ok(layout.contentBottom >= card.y);
   const frame = buildCanvasFrame(layout, 1200);
   assert.equal(frame.offsetX, 1840);
-  assert.equal(frame.offsetY, 1620);
+  assert.equal(frame.offsetY, 680);
   assert.equal(frame.width, layout.contentWidth + 2400);
-  assert.equal(frame.height, layout.contentHeight + 2400);
+  assert.equal(frame.height, 770);
+});
+
+test("manual card placement automatically shortens the canvas height", () => {
+  const people = [
+    person("lower-generation", 0, {
+      manualX: 100,
+      manualY: 100,
+      manualPositionVersion: MANUAL_POSITION_VERSION,
+    }),
+    person("upper-generation", 5, {
+      manualX: 500,
+      manualY: 300,
+      manualPositionVersion: MANUAL_POSITION_VERSION,
+    }),
+  ];
+  const layout = buildFamilyLayout(people);
+  const frame = buildCanvasFrame(layout);
+
+  assert.equal(layout.contentTop, 100);
+  assert.equal(layout.contentBottom, 434);
+  assert.equal(layout.contentHeight, 334);
+  assert.equal(frame.offsetY, 160);
+  assert.equal(frame.height, 854);
 });
 
 test("rows never overlap after hierarchy compaction", () => {
