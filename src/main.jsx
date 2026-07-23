@@ -6,6 +6,7 @@ import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPe
 import { formatLifespan } from "./formatters";
 import { buildCanvasFrame, buildFamilyLayout as buildHierarchyLayout, DEFAULT_CANVAS_MARGIN, MANUAL_POSITION_VERSION } from "./layout";
 import { searchFamilyBranch, selectionFocusIds } from "./relations";
+import { clampCanvasScale, pinchCanvasScale, wheelCanvasScale } from "./canvas";
 import "./styles.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
@@ -955,12 +956,15 @@ function App() {
   const [editor, setEditor] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [scale, setScale] = useState(1);
+  const [canvasPanning, setCanvasPanning] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const stageRef = useRef(null);
   const boardRef = useRef(null);
   const nodeRefs = useRef(new Map());
+  const canvasGestureRef = useRef({ pointers: new Map(), pan: null, pinch: null });
+  const pendingViewportRef = useRef(null);
   const selected = people.find((person) => person.id === selectedId) || null;
   const focusIds = selectionFocusIds(people, selectedId);
   const ownerSignedIn = isOwnerUser(authUser);
@@ -1078,6 +1082,31 @@ function App() {
       behavior,
     });
   };
+  const zoomCanvasTo = (nextScale, clientX, clientY) => {
+    const board = boardRef.current;
+    const stage = stageRef.current;
+    if (!board || !stage) return;
+    const clampedScale = clampCanvasScale(nextScale);
+    if (Math.abs(clampedScale - scale) < .001) return;
+    const boardRect = board.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const anchorX = Number.isFinite(clientX) ? clientX : boardRect.left + board.clientWidth / 2;
+    const anchorY = Number.isFinite(clientY) ? clientY : boardRect.top + board.clientHeight / 2;
+    pendingViewportRef.current = {
+      type: "anchor",
+      clientX: anchorX,
+      clientY: anchorY,
+      stageX: (anchorX - stageRect.left) / scale,
+      stageY: (anchorY - stageRect.top) / scale,
+    };
+    setScale(clampedScale);
+  };
+  const zoomCanvasBy = (amount) => {
+    const board = boardRef.current;
+    if (!board) return;
+    const rect = board.getBoundingClientRect();
+    zoomCanvasTo(scale + amount, rect.left + board.clientWidth / 2, rect.top + board.clientHeight / 2);
+  };
   const treeScale = () => {
     const board = boardRef.current;
     if (!board) return null;
@@ -1090,7 +1119,13 @@ function App() {
   };
   const fitTree = () => {
     const fittedScale = treeScale();
-    if (fittedScale != null) setScale(fittedScale);
+    if (fittedScale == null) return;
+    if (Math.abs(fittedScale - scale) < .001) {
+      centerTree();
+      return;
+    }
+    pendingViewportRef.current = { type: "center" };
+    setScale(fittedScale);
   };
   const didAutoFit = useRef(false);
   useEffect(() => {
@@ -1100,16 +1135,32 @@ function App() {
     didAutoFit.current = true;
     const frame = requestAnimationFrame(() => {
       const fittedScale = treeScale();
-      if (fittedScale != null) setScale(fittedScale);
+      if (fittedScale == null) return;
+      if (Math.abs(fittedScale - scale) < .001) centerTree("auto");
+      else {
+        pendingViewportRef.current = { type: "center" };
+        setScale(fittedScale);
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [people.length, familyLayout.contentWidth, familyLayout.contentHeight]);
   useEffect(() => { setSheetExpanded(false); }, [selectedId]);
   useEffect(() => {
-    if (!people.length) return;
-    const frame = requestAnimationFrame(() => centerTree("auto"));
-    return () => cancelAnimationFrame(frame);
-  }, [scale, people.length]);
+    const board = boardRef.current;
+    if (!board) return undefined;
+    const handleWheel = (event) => {
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const deltaY = event.deltaMode === 1
+        ? event.deltaY * 16
+        : event.deltaMode === 2
+          ? event.deltaY * board.clientHeight
+          : event.deltaY;
+      zoomCanvasTo(wheelCanvasScale(scale, deltaY), event.clientX, event.clientY);
+    };
+    board.addEventListener("wheel", handleWheel, { passive: false });
+    return () => board.removeEventListener("wheel", handleWheel);
+  }, [scale]);
   const previousCanvasOrigin = useRef(null);
   useLayoutEffect(() => {
     const board = boardRef.current;
@@ -1120,6 +1171,81 @@ function App() {
     }
     previousCanvasOrigin.current = { x: canvasOffsetX, y: canvasOffsetY };
   }, [canvasOffsetX, canvasOffsetY, scale]);
+  useLayoutEffect(() => {
+    const pending = pendingViewportRef.current;
+    const board = boardRef.current;
+    const stage = stageRef.current;
+    if (!pending || !board || !stage) return;
+    pendingViewportRef.current = null;
+    if (pending.type === "center") {
+      centerTree("auto");
+      return;
+    }
+    const stageRect = stage.getBoundingClientRect();
+    board.scrollLeft += stageRect.left + pending.stageX * scale - pending.clientX;
+    board.scrollTop += stageRect.top + pending.stageY * scale - pending.clientY;
+  }, [scale]);
+  const startCanvasGesture = (event) => {
+    if ((event.pointerType === "mouse" && event.button !== 0) || event.target.closest(".positioned-person, button, input, textarea, select, a")) return;
+    const board = event.currentTarget;
+    const gesture = canvasGestureRef.current;
+    event.preventDefault();
+    board.setPointerCapture?.(event.pointerId);
+    gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (gesture.pointers.size === 1) {
+      gesture.pan = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        left: board.scrollLeft,
+        top: board.scrollTop,
+      };
+      gesture.pinch = null;
+    } else if (gesture.pointers.size === 2) {
+      const [first, second] = [...gesture.pointers.values()];
+      gesture.pan = null;
+      gesture.pinch = {
+        distance: Math.hypot(second.x - first.x, second.y - first.y),
+        scale,
+      };
+    }
+    setCanvasPanning(true);
+    setSelectedId(null);
+  };
+  const moveCanvasGesture = (event) => {
+    const board = event.currentTarget;
+    const gesture = canvasGestureRef.current;
+    if (!gesture.pointers.has(event.pointerId)) return;
+    event.preventDefault();
+    gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (gesture.pointers.size >= 2 && gesture.pinch) {
+      const [first, second] = [...gesture.pointers.values()];
+      const distance = Math.hypot(second.x - first.x, second.y - first.y);
+      const centerX = (first.x + second.x) / 2;
+      const centerY = (first.y + second.y) / 2;
+      zoomCanvasTo(pinchCanvasScale(gesture.pinch.scale, gesture.pinch.distance, distance), centerX, centerY);
+      return;
+    }
+    if (gesture.pan?.id === event.pointerId) {
+      board.scrollLeft = gesture.pan.left - (event.clientX - gesture.pan.x);
+      board.scrollTop = gesture.pan.top - (event.clientY - gesture.pan.y);
+    }
+  };
+  const endCanvasGesture = (event) => {
+    const board = event.currentTarget;
+    const gesture = canvasGestureRef.current;
+    gesture.pointers.delete(event.pointerId);
+    if (board.hasPointerCapture?.(event.pointerId)) board.releasePointerCapture(event.pointerId);
+    gesture.pinch = null;
+    const remaining = [...gesture.pointers.entries()];
+    if (remaining.length === 1) {
+      const [id, point] = remaining[0];
+      gesture.pan = { id, x: point.x, y: point.y, left: board.scrollLeft, top: board.scrollTop };
+    } else {
+      gesture.pan = null;
+    }
+    setCanvasPanning(remaining.length > 0);
+  };
   useEffect(() => {
     if (!selectedId) return;
     const frame = requestAnimationFrame(() => {
@@ -1241,17 +1367,26 @@ function App() {
       <main id="tree" className="workspace">
         <section className={`tree-area ${selected ? "has-detail" : ""}`} aria-label="Семейное древо">
           <div className="canvas-heading">
-            <div><h1>Семейное древо</h1><p>Начните с самых дальних известных предков</p></div>
+            <div><h1>Семейное древо</h1><p>Колесо или щипок — масштаб · потяните пустой фон — перемещение</p></div>
             <div className="zoom-controls" aria-label="Масштаб">
-              <button onClick={() => setScale((value) => Math.max(.08, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
+              <button onClick={() => zoomCanvasBy(-.1)} aria-label="Уменьшить">−</button>
               <output>{Math.round(scale * 100)}%</output>
-              <button onClick={() => setScale((value) => Math.min(1.25, +(value + .1).toFixed(2)))} aria-label="Увеличить">+</button>
+              <button onClick={() => zoomCanvasBy(.1)} aria-label="Увеличить">+</button>
               <button className="center-button" onClick={fitTree}><Icon name="target" size={18}/>Вместить древо</button>
               {canManage && hasManualLayout && <button className="center-button" onClick={resetLayout} title="Вернуть автоматическую раскладку">Сбросить раскладку</button>}
             </div>
           </div>
 
-          <div className="tree-board" ref={boardRef} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
+          <div
+            className={`tree-board ${canvasPanning ? "is-panning" : ""}`}
+            ref={boardRef}
+            title="Колесо или щипок — масштаб · потяните пустой фон — перемещение"
+            aria-label="Полотно семейного древа"
+            onPointerDown={startCanvasGesture}
+            onPointerMove={moveCanvasGesture}
+            onPointerUp={endCanvasGesture}
+            onPointerCancel={endCanvasGesture}
+          >
             <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${stageHeight * scale}px` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
               <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${stageHeight}px`, transform: `scale(${scale})` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
                 {people.length === 0 ? (
