@@ -10,7 +10,7 @@ rules_version = '2';
 // Required fields:
 // id, name, birth, death, relation, generation, parents, partnerIds, currentPartnerId, formerPartnerIds,
 // birthplace, deathplace, maidenName, manualGeneration, note, photo,
-// photoX, photoY, photoScale.
+// photoX, photoY, photoScale, manualX, manualY.
 //
 // Visitors may read the public tree. Only the verified owner Google account
 // may create, update, or delete records.
@@ -36,12 +36,12 @@ service cloud.firestore {
       return data.keys().hasAll([
           'id', 'name', 'birth', 'death', 'relation', 'generation',
           'parents', 'partnerIds', 'currentPartnerId', 'formerPartnerIds', 'birthplace', 'deathplace', 'maidenName',
-          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale'
+          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale', 'manualX', 'manualY'
         ]) &&
         data.keys().hasOnly([
           'id', 'name', 'birth', 'death', 'relation', 'generation',
           'parents', 'partnerIds', 'currentPartnerId', 'formerPartnerIds', 'birthplace', 'deathplace', 'maidenName',
-          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale'
+          'manualGeneration', 'note', 'photo', 'photoX', 'photoY', 'photoScale', 'manualX', 'manualY'
         ]) &&
         data.id is string && data.id == personId && data.id.size() > 0 && data.id.size() <= 160 &&
         data.name is string && data.name.size() > 0 && data.name.size() <= 240 &&
@@ -61,7 +61,9 @@ service cloud.firestore {
         validString(data.photo, 900000) &&
         data.photoX is number && data.photoX >= 0 && data.photoX <= 100 &&
         data.photoY is number && data.photoY >= 0 && data.photoY <= 100 &&
-        data.photoScale is number && data.photoScale >= 1 && data.photoScale <= 2;
+        data.photoScale is number && data.photoScale >= 1 && data.photoScale <= 2 &&
+        (data.manualX == null || (data.manualX is number && data.manualX >= -100000 && data.manualX <= 100000)) &&
+        (data.manualY == null || (data.manualY is number && data.manualY >= -100000 && data.manualY <= 100000));
     }
 
     match /trees/main/people/{personId} {

@@ -135,6 +135,9 @@ nav { display: flex; align-items: center; gap: 8px; }
 .connections g.is-flowing .branch-node { r: 6; filter: drop-shadow(0 0 4px var(--branch-color)); }
 @keyframes veinFlow { to { stroke-dashoffset: -28; } }
 .family-unit { display: flex; align-items: center; flex: 0 0 auto; }
+.family-unit.draggable, .family-unit.draggable .person-card { cursor: grab; }
+.family-unit.is-dragging, .family-unit.is-dragging .person-card { cursor: grabbing; }
+.family-unit.is-dragging { z-index: 50; }
 .positioned-family { position: absolute; z-index: 2; isolation: isolate; animation: familyIn .6s ease-out both; }
 @keyframes familyIn { from { opacity: 0; filter: blur(4px); } }
 .positioned-family.partner-pair::after { content: ""; position: absolute; z-index: -1; inset: -12px -14px; border: 1px dashed var(--family-color, var(--green)); border-radius: 20px; background: rgba(255,253,247,.45); opacity: .5; box-shadow: 0 14px 34px -20px rgba(52,48,36,.5); pointer-events: none; }

@@ -57,6 +57,8 @@ function normalizePerson(person) {
     deathplace: clean.deathplace || "",
     maidenName: clean.maidenName || "",
     manualGeneration: Boolean(clean.manualGeneration),
+    manualX: Number.isFinite(clean.manualX) ? clean.manualX : null,
+    manualY: Number.isFinite(clean.manualY) ? clean.manualY : null,
     note: clean.note || "",
     photo: clean.photo || "",
     photoX: Number.isFinite(clean.photoX) ? clean.photoX : 50,
@@ -478,15 +480,65 @@ function buildFamilyLayout(people) {
     units.forEach((unit) => { unit.x += shift; });
     maxRight += shift;
   }
-  const height = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
-  return { units, width: Math.max(940, maxRight + STAGE_PADDING), height: Math.max(300, height) };
+  // ── Manual overrides: any unit whose members carry a hand-placed position wins over auto-layout.
+  // The owner drags families freely; connectors follow because they are drawn from live DOM rects. ──
+  units.forEach((unit) => {
+    const placed = unit.people.find((person) => Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
+    if (placed) { unit.x = placed.manualX; unit.y = placed.manualY; unit.manual = true; }
+  });
+
+  let autoHeight = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
+  let width = 0;
+  let heightFromUnits = 0;
+  units.forEach((unit) => {
+    if (unit.x + unit.width > width) width = unit.x + unit.width;
+    if (unit.y + CARD_HEIGHT > heightFromUnits) heightFromUnits = unit.y + CARD_HEIGHT;
+  });
+  return {
+    units,
+    width: Math.max(940, width + STAGE_PADDING),
+    height: Math.max(300, autoHeight, heightFromUnits + STAGE_BOTTOM),
+  };
 }
 
 function generationLabel(generation) {
   return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
 }
 
-function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
+function FamilyUnit({ unit, selectedId, focusIds, onSelect, register, canManage, scale, onDragEnd }) {
+  const [drag, setDrag] = useState(null);
+  const dragState = useRef(null);
+  const draggedRef = useRef(false);
+  const beginDrag = (event) => {
+    if (!canManage || event.button !== 0) return;
+    const start = { x: event.clientX, y: event.clientY, moved: false };
+    dragState.current = start;
+    const onMove = (moveEvent) => {
+      const dx = (moveEvent.clientX - start.x) / (scale || 1);
+      const dy = (moveEvent.clientY - start.y) / (scale || 1);
+      if (!start.moved && Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 4) return;
+      start.moved = true;
+      draggedRef.current = true;
+      setDrag({ dx, dy });
+    };
+    const onUp = (upEvent) => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (start.moved) {
+        const dx = (upEvent.clientX - start.x) / (scale || 1);
+        const dy = (upEvent.clientY - start.y) / (scale || 1);
+        onDragEnd(unit, Math.max(0, unit.x + dx), Math.max(0, unit.y + dy));
+      }
+      setDrag(null);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+  const suppressClickAfterDrag = (event) => {
+    if (draggedRef.current) { event.stopPropagation(); event.preventDefault(); draggedRef.current = false; }
+  };
+  const left = unit.x + (drag?.dx || 0);
+  const top = unit.y + (drag?.dy || 0);
   const anchor = unit.people.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, unit.people[0]);
   const anchorIndex = unit.people.findIndex((person) => person.id === anchor.id);
   const extraMarriages = anchor.partnerIds
@@ -512,9 +564,11 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
   const hasMarriageStatus = unit.people.some((person) => person.currentPartnerId || person.formerPartnerIds.length);
   return (
     <div
-      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${hasMarriageStatus ? "no-shared-box" : ""}`}
-      style={{ left: `${unit.x}px`, top: `${unit.y}px`, "--family-color": unitColor }}
+      className={`family-unit positioned-family ${unit.people.length > 1 ? "partner-pair" : "single-person"} ${extraMarriages.length ? "multi-spouse-unit" : ""} ${hasMarriageStatus ? "no-shared-box" : ""} ${canManage ? "draggable" : ""} ${drag ? "is-dragging" : ""}`}
+      style={{ left: `${left}px`, top: `${top}px`, "--family-color": unitColor }}
       data-family={unit.id}
+      onMouseDown={beginDrag}
+      onClickCapture={suppressClickAfterDrag}
     >
       {currentMarriageFrame ? <span className="current-marriage-frame" style={currentMarriageFrame} aria-hidden="true"/> : null}
       {extraMarriages.length ? <svg className="marriage-rails" viewBox={`0 0 ${unit.width} ${CARD_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
@@ -974,6 +1028,12 @@ function App() {
   const familyLayout = buildFamilyLayout(visiblePeople);
   const stageWidth = familyLayout.width;
   const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
+  const hasManualLayout = people.some((person) => Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
+  const handleUnitDrag = (unit, x, y) => {
+    const ids = new Set(unit.people.map((person) => person.id));
+    commitPeople((current) => current.map((person) => ids.has(person.id) ? { ...person, manualX: x, manualY: y } : person), "Расположение сохранено");
+  };
+  const resetLayout = () => commitPeople((current) => current.map((person) => ({ ...person, manualX: null, manualY: null })), "Раскладка сброшена");
   const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
     if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior });
@@ -1122,6 +1182,7 @@ function App() {
               <output>{Math.round(scale * 100)}%</output>
               <button onClick={() => setScale((value) => Math.min(1.25, +(value + .1).toFixed(2)))} aria-label="Увеличить">+</button>
               <button className="center-button" onClick={fitTree}><Icon name="target" size={18}/>Вместить древо</button>
+              {canManage && hasManualLayout && <button className="center-button" onClick={resetLayout} title="Вернуть автоматическую раскладку">Сбросить раскладку</button>}
             </div>
           </div>
 
@@ -1137,7 +1198,7 @@ function App() {
                   </div>
                 ) : <>
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale} selectedId={selectedId}/>
-                {familyLayout.units.map((unit) => <FamilyUnit key={unit.id} unit={unit} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register}/>)}
+                {familyLayout.units.map((unit) => <FamilyUnit key={unit.id} unit={unit} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} onDragEnd={handleUnitDrag}/>)}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
                 </>}
               </div>
