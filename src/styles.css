@@ -119,10 +119,7 @@ nav { display: flex; align-items: center; gap: 8px; }
 .zoom-controls button:hover { background: #efede6; }
 .zoom-controls .center-button { font-size: 14px; gap: 7px; border-right: 0; min-width: 108px; }
 
-.tree-board { height: calc(100% - 102px); overflow: auto; scroll-behavior: smooth; padding: 0 18px 35px; cursor: grab; touch-action: none; overscroll-behavior: contain; }
-.tree-board.is-panning { cursor: grabbing; scroll-behavior: auto; user-select: none; }
-.tree-board .positioned-person.draggable { cursor: grab; }
-.tree-board .positioned-person.is-dragging { cursor: grabbing; }
+.tree-board { height: calc(100% - 102px); overflow: auto; scroll-behavior: smooth; padding: 0 18px 35px; }
 .tree-scaler { min-width: 940px; margin-inline: auto; }
 .tree-stage { width: 100%; min-width: 940px; height: 770px; position: relative; transform-origin: top left; }
 .family-cluster {
