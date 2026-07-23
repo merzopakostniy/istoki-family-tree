@@ -188,9 +188,9 @@ nav { display: flex; align-items: center; gap: 8px; }
 .avatar, .detail-avatar, .editor-photo-preview { border-radius: 48% / 42%; display: grid; place-items: center; overflow: hidden; font-family: Georgia, serif; color: #f5f2e9; background: radial-gradient(ellipse at 35% 25%, #a7a89e, #50534c 66%, #30332e); border: 3px solid #f3ecdb; box-shadow: 0 0 0 1px var(--gold-soft), 0 3px 8px rgba(48,44,34,.2); }
 .avatar { width: 60px; height: 82px; flex: 0 0 auto; font-size: 18px; letter-spacing: .03em; }
 .portrait-image { width: 100%; height: 100%; display: block; object-fit: cover; transform-origin: center; }
-.person-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.person-copy { min-width: 0; flex: 1 1 0; display: flex; flex-direction: column; gap: 4px; padding-right: 8px; }
 .person-copy strong { font-family: Georgia, "Times New Roman", serif; font-weight: 600; font-size: 15px; line-height: 1.2; letter-spacing: -.01em; color: #23301f; white-space: normal; overflow-wrap: anywhere; }
-.person-years { color: var(--terra); font-size: 12.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.person-years { color: var(--terra); font-size: 12.5px; font-weight: 600; line-height: 1.25; letter-spacing: .01em; white-space: normal; overflow-wrap: normal; }
 .person-copy small { color: var(--muted); font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
 .no-results { position: absolute; inset: 150px 0 auto; text-align: center; color: #a5a794; }
 .empty-tree { position: absolute; inset: 120px 0 auto; margin: auto; width: min(440px, calc(100% - 40px)); display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -342,7 +342,7 @@ dd { margin: 0; }
 .person-card.is-selected { border-color: #d07b55; box-shadow: 0 0 0 2px #d07b55 inset, 0 10px 26px -16px rgba(0,0,0,.8); }
 .person-card.is-focused { border-color: #e0bd76; box-shadow: 0 0 0 1.5px #e0bd76 inset, 0 10px 26px -18px rgba(0,0,0,.75); }
 .avatar { width: 78px; height: 106px; border-radius: 50% / 48%; border: 4px solid #f0e2c2; background: #5d6157; box-shadow: 0 0 0 1px #b8965a, 0 0 0 2.5px rgba(255,248,228,.55), inset 0 0 0 1px rgba(255,255,255,.35), 0 6px 15px rgba(39,32,20,.28); }
-.person-copy { align-self: stretch; justify-content: center; gap: 4px; padding: 4px 0 3px; }
+.person-copy { align-self: stretch; justify-content: center; gap: 4px; padding: 4px 8px 3px 0; }
 .person-copy strong { font-size: 16px; color: #2b3328; }
 .person-years { color: #8b4e35; font-size: 12px; }
 .person-copy small { color: #687061; font-size: 10.5px; }
