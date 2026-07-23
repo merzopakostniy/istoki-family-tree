@@ -7,6 +7,7 @@ export const STAGE_TOP = 52;
 export const STAGE_BOTTOM = 82;
 export const EMPTY_STAGE_HEIGHT = 770;
 export const MANUAL_POSITION_VERSION = 2;
+export const DEFAULT_CANVAS_MARGIN = 1200;
 
 const SIBLING_UNIT_GAP = 30;
 const BRANCH_UNIT_GAP = 68;
@@ -263,9 +264,32 @@ function alignGenerationFamilies(rows, unitByPersonId, generations) {
   });
 }
 
+export function buildCanvasFrame(layout, margin = DEFAULT_CANVAS_MARGIN) {
+  const safeMargin = Math.max(0, margin);
+  return {
+    offsetX: safeMargin - layout.contentLeft,
+    offsetY: safeMargin - layout.contentTop,
+    width: Math.max(MIN_STAGE_WIDTH, layout.contentWidth + safeMargin * 2),
+    height: Math.max(EMPTY_STAGE_HEIGHT, layout.contentHeight + safeMargin * 2),
+  };
+}
+
 export function buildFamilyLayout(people) {
   if (!people.length) {
-    return { units: [], cards: [], clusters: [], generations: [], width: MIN_STAGE_WIDTH, height: EMPTY_STAGE_HEIGHT };
+    return {
+      units: [],
+      cards: [],
+      clusters: [],
+      generations: [],
+      contentLeft: 0,
+      contentTop: 0,
+      contentRight: MIN_STAGE_WIDTH,
+      contentBottom: EMPTY_STAGE_HEIGHT,
+      contentWidth: MIN_STAGE_WIDTH,
+      contentHeight: EMPTY_STAGE_HEIGHT,
+      width: MIN_STAGE_WIDTH,
+      height: EMPTY_STAGE_HEIGHT,
+    };
   }
 
   const { units, unitByPersonId } = createUnits(people);
@@ -304,8 +328,12 @@ export function buildFamilyLayout(people) {
     });
   }));
 
+  const contentLeft = Math.min(...cards.map((card) => card.x), ...units.map((unit) => unit.x));
+  const contentTop = Math.min(...cards.map((card) => card.y), ...units.map((unit) => unit.y));
   const contentRight = Math.max(...cards.map((card) => card.x + CARD_WIDTH), ...units.map((unit) => unit.x + unit.width));
   const contentBottom = Math.max(...cards.map((card) => card.y + CARD_HEIGHT));
+  const contentWidth = contentRight - contentLeft;
+  const contentHeight = contentBottom - contentTop;
   const cardByPersonId = new Map(cards.map((card) => [card.person.id, card]));
   const clusters = units.filter((unit) => unit.people.length > 1).map((unit) => {
     const memberCards = unit.people.map((person) => cardByPersonId.get(person.id)).filter(Boolean);
@@ -319,11 +347,17 @@ export function buildFamilyLayout(people) {
     units,
     cards,
     clusters,
+    contentLeft,
+    contentTop,
+    contentRight,
+    contentBottom,
+    contentWidth,
+    contentHeight,
     generations: generationNumbers.map((generation) => ({
       generation,
       y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
     })).sort((first, second) => first.y - second.y),
-    width: Math.max(MIN_STAGE_WIDTH, contentRight + STAGE_PADDING),
-    height: Math.max(EMPTY_STAGE_HEIGHT, contentBottom + STAGE_BOTTOM, STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM),
+    width: Math.max(MIN_STAGE_WIDTH, contentWidth + STAGE_PADDING * 2),
+    height: Math.max(EMPTY_STAGE_HEIGHT, contentHeight + STAGE_TOP + STAGE_BOTTOM, STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM),
   };
 }

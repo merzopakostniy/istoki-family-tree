@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildCanvasFrame,
   buildFamilyLayout,
   CARD_WIDTH,
   COUPLE_GAP,
@@ -127,6 +128,29 @@ test("legacy group coordinates are ignored instead of scattering the rebuilt hie
 
   assert.ok(layout.cards.every((card) => card.x < 1000));
   assert.ok(layout.cards.every((card) => card.y < 500));
+});
+
+test("current manual coordinates can extend the canvas left and upward", () => {
+  const people = [
+    person("free-card", 0, {
+      manualX: -640,
+      manualY: -420,
+      manualPositionVersion: MANUAL_POSITION_VERSION,
+    }),
+  ];
+  const layout = buildFamilyLayout(people);
+  const card = layout.cards[0];
+
+  assert.deepEqual({ x: card.x, y: card.y }, { x: -640, y: -420 });
+  assert.equal(layout.contentLeft, -640);
+  assert.equal(layout.contentTop, -420);
+  assert.ok(layout.contentRight >= card.x + CARD_WIDTH);
+  assert.ok(layout.contentBottom >= card.y);
+  const frame = buildCanvasFrame(layout, 1200);
+  assert.equal(frame.offsetX, 1840);
+  assert.equal(frame.offsetY, 1620);
+  assert.equal(frame.width, layout.contentWidth + 2400);
+  assert.equal(frame.height, layout.contentHeight + 2400);
 });
 
 test("rows never overlap after hierarchy compaction", () => {

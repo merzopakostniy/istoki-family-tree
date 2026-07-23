@@ -3,10 +3,11 @@ import { createRoot } from "react-dom/client";
 import { onAuthStateChanged } from "firebase/auth";
 import { generationMeta } from "./data";
 import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPeople } from "./firebase";
-import { buildFamilyLayout as buildHierarchyLayout, MANUAL_POSITION_VERSION } from "./layout";
+import { buildCanvasFrame, buildFamilyLayout as buildHierarchyLayout, DEFAULT_CANVAS_MARGIN, MANUAL_POSITION_VERSION } from "./layout";
 import "./styles.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
+const FIT_PADDING = 160;
 
 function Icon({ name, size = 20 }) {
   const paths = {
@@ -497,7 +498,7 @@ function generationLabel(generation) {
   return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
 }
 
-function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canManage, scale, onDragEnd }) {
+function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canManage, scale, canvasOffsetX, canvasOffsetY, onDragEnd }) {
   const [drag, setDrag] = useState(null);
   const draggedRef = useRef(false);
   const redrawFrame = useRef(null);
@@ -532,7 +533,7 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
       if (start.moved) {
         const dx = (upEvent.clientX - start.x) / (scale || 1);
         const dy = (upEvent.clientY - start.y) / (scale || 1);
-        onDragEnd(card.person.id, Math.max(0, card.x + dx), Math.max(0, card.y + dy));
+        onDragEnd(card.person.id, card.x + dx, card.y + dy);
         clickResetTimer.current = setTimeout(() => { draggedRef.current = false; }, 0);
       }
       setDrag(null);
@@ -546,8 +547,8 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
     if (draggedRef.current) { event.stopPropagation(); event.preventDefault(); draggedRef.current = false; }
   };
   const person = card.person;
-  const left = card.x + (drag?.dx || 0);
-  const top = card.y + (drag?.dy || 0);
+  const left = card.x + canvasOffsetX + (drag?.dx || 0);
+  const top = card.y + canvasOffsetY + (drag?.dy || 0);
   return (
     <div
       className={`positioned-person ${canManage ? "draggable" : ""} ${drag ? "is-dragging" : ""}`}
@@ -599,7 +600,7 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
       </section>
       {canEdit && <section className="placement-section">
         <div className="section-title"><h3>Расположение карточки</h3></div>
-        <p>Эта карточка перемещается отдельно от всех остальных.</p>
+        <p>Карточка перемещается отдельно, а полотно автоматически расширяется во все стороны.</p>
         <div className="placement-controls">
           <button onClick={() => onMove("left")}><Icon name="arrowLeft" size={17}/>Влево</button>
           <button onClick={() => onMove("right")}>Вправо<Icon name="arrowRight" size={17}/></button>
@@ -1051,7 +1052,11 @@ function App() {
 
   const visiblePeople = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
   const familyLayout = buildHierarchyLayout(visiblePeople);
-  const stageWidth = familyLayout.width;
+  const canvasFrame = buildCanvasFrame(familyLayout, DEFAULT_CANVAS_MARGIN);
+  const canvasOffsetX = canvasFrame.offsetX;
+  const canvasOffsetY = canvasFrame.offsetY;
+  const stageWidth = canvasFrame.width;
+  const stageHeight = canvasFrame.height;
   const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
   const hasManualLayout = people.some((person) => person.manualPositionVersion === MANUAL_POSITION_VERSION && Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
   const handlePersonDrag = (id, x, y) => {
@@ -1070,13 +1075,22 @@ function App() {
   })), "Раскладка сброшена");
   const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
-    if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior });
+    if (!board) return;
+    const contentCenterX = canvasOffsetX + (familyLayout.contentLeft + familyLayout.contentRight) / 2;
+    const contentTop = canvasOffsetY + familyLayout.contentTop;
+    board.scrollTo({
+      left: Math.max(0, contentCenterX * scale - board.clientWidth / 2),
+      top: Math.max(0, (contentTop - 48) * scale),
+      behavior,
+    });
   };
   const treeScale = () => {
     const board = boardRef.current;
     if (!board) return null;
-    const widthScale = (board.clientWidth - 40) / stageWidth;
-    const heightScale = (board.clientHeight - 40) / familyLayout.height;
+    const fitWidth = Math.max(940, familyLayout.contentWidth + FIT_PADDING * 2);
+    const fitHeight = Math.max(770, familyLayout.contentHeight + FIT_PADDING * 2);
+    const widthScale = (board.clientWidth - 40) / fitWidth;
+    const heightScale = (board.clientHeight - 40) / fitHeight;
     const fittedScale = Math.max(.08, Math.min(1, widthScale, heightScale));
     return +fittedScale.toFixed(2);
   };
@@ -1095,13 +1109,23 @@ function App() {
       if (fittedScale != null) setScale(fittedScale);
     });
     return () => cancelAnimationFrame(frame);
-  }, [people.length, stageWidth, familyLayout.height]);
+  }, [people.length, familyLayout.contentWidth, familyLayout.contentHeight]);
   useEffect(() => { setSheetExpanded(false); }, [selectedId]);
   useEffect(() => {
     if (!people.length) return;
     const frame = requestAnimationFrame(() => centerTree("auto"));
     return () => cancelAnimationFrame(frame);
-  }, [scale, stageWidth, people.length]);
+  }, [scale, people.length]);
+  const previousCanvasOrigin = useRef(null);
+  useLayoutEffect(() => {
+    const board = boardRef.current;
+    const previous = previousCanvasOrigin.current;
+    if (board && previous) {
+      board.scrollLeft += (canvasOffsetX - previous.x) * scale;
+      board.scrollTop += (canvasOffsetY - previous.y) * scale;
+    }
+    previousCanvasOrigin.current = { x: canvasOffsetX, y: canvasOffsetY };
+  }, [canvasOffsetX, canvasOffsetY, scale]);
   useEffect(() => {
     if (!selectedId) return;
     const frame = requestAnimationFrame(() => {
@@ -1163,8 +1187,8 @@ function App() {
     commitPeople((current) => {
       return current.map((person) => person.id === id ? {
         ...person,
-        manualX: Math.max(0, card.x + offset[0]),
-        manualY: Math.max(0, card.y + offset[1]),
+        manualX: card.x + offset[0],
+        manualY: card.y + offset[1],
         manualPositionVersion: MANUAL_POSITION_VERSION,
       } : person);
     }, "Расположение карточки изменено");
@@ -1216,8 +1240,8 @@ function App() {
           </div>
 
           <div className="tree-board" ref={boardRef} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
-            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${familyLayout.height * scale}px` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
-              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${familyLayout.height}px`, transform: `scale(${scale})` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
+            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${stageHeight * scale}px` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
+              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${stageHeight}px`, transform: `scale(${scale})` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
                 {people.length === 0 ? (
                   <div className="empty-tree">
                     <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
@@ -1232,8 +1256,8 @@ function App() {
                     key={cluster.id}
                     style={{
                       "--family-color": branchColor(cluster.id),
-                      left: `${cluster.x - 14}px`,
-                      top: `${cluster.y - 14}px`,
+                      left: `${cluster.x + canvasOffsetX - 14}px`,
+                      top: `${cluster.y + canvasOffsetY - 14}px`,
                       width: `${cluster.width + 28}px`,
                       height: `${cluster.height + 28}px`,
                     }}
@@ -1243,12 +1267,12 @@ function App() {
                   </div>
                 ))}
                 {familyLayout.generations.map((row) => (
-                  <div className="generation-guide" key={row.generation} style={{ top: `${row.y - 24}px` }} aria-hidden="true">
+                  <div className="generation-guide" key={row.generation} style={{ top: `${row.y + canvasOffsetY - 24}px` }} aria-hidden="true">
                     <span>{generationLabel(row.generation)}</span>
                   </div>
                 ))}
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale} selectedId={selectedId}/>
-                {familyLayout.cards.map((card) => <PositionedPerson key={card.person.id} card={card} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} onDragEnd={handlePersonDrag}/>)}
+                {familyLayout.cards.map((card) => <PositionedPerson key={card.person.id} card={card} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} canvasOffsetX={canvasOffsetX} canvasOffsetY={canvasOffsetY} onDragEnd={handlePersonDrag}/>)}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
                 </>}
               </div>
