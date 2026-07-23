@@ -24,10 +24,6 @@ function Icon({ name, size = 20 }) {
     chevron: <path d="m9 6 6 6-6 6"/>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
-    arrowLeft: <path d="m14.5 6-6 6 6 6M9 12h10"/>,
-    arrowRight: <path d="m9.5 6 6 6-6 6M15 12H5"/>,
-    arrowUp: <path d="m6 14.5 6-6 6 6M12 9v10"/>,
-    arrowDown: <path d="m6 9.5 6 6 6-6M12 15V5"/>,
     cloud: <><path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.4-1.7A4.8 4.8 0 0 0 7 18Z"/><path d="m9 13 2 2 4-4"/></>,
   };
   return <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -572,7 +568,7 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
   );
 }
 
-function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClose, onEdit, onDelete, onSelect, onMove }) {
+function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClose, onEdit, onDelete, onSelect }) {
   if (!person) return null;
   const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || person.partnerIds.includes(item.id) || item.partnerIds.includes(person.id));
   return (
@@ -591,9 +587,9 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
         <div className="section-title"><h3>О человеке</h3>{canEdit && <button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button>}</div>
         <dl>
           <div><dt>Девичья фамилия</dt><dd>{person.maidenName || "Не указана"}</dd></div>
-          <div><dt>Год рождения</dt><dd>{person.birth || "Не указан"}</dd></div>
+          <div><dt>Дата рождения</dt><dd>{person.birth || "Не указана"}</dd></div>
           <div><dt>Место рождения</dt><dd>{person.birthplace || "Не указано"}</dd></div>
-          <div><dt>Год смерти</dt><dd>{person.death || "Не указан"}</dd></div>
+          <div><dt>Дата смерти</dt><dd>{person.death || "Не указана"}</dd></div>
           <div><dt>Место смерти</dt><dd>{person.deathplace || "Не указано"}</dd></div>
           <div><dt>Поколение</dt><dd>{generationLabel(person.generation)}</dd></div>
           <div><dt>Кем приходится</dt><dd>{person.relation || "Не указано"}</dd></div>
@@ -608,16 +604,6 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
           </button>
         )) : <p className="empty-copy">Связи ещё не добавлены.</p>}
       </section>
-      {canEdit && <section className="placement-section">
-        <div className="section-title"><h3>Расположение карточки</h3></div>
-        <p>Карточка перемещается отдельно, а полотно автоматически расширяется во все стороны.</p>
-        <div className="placement-controls">
-          <button onClick={() => onMove("left")}><Icon name="arrowLeft" size={17}/>Влево</button>
-          <button onClick={() => onMove("right")}>Вправо<Icon name="arrowRight" size={17}/></button>
-          <button onClick={() => onMove("up")}><Icon name="arrowUp" size={17}/>Выше</button>
-          <button onClick={() => onMove("down")}><Icon name="arrowDown" size={17}/>Ниже</button>
-        </div>
-      </section>}
       <div className="detail-actions">
         {canEdit && <button className="button secondary" onClick={onEdit}><Icon name="edit" size={18}/>Редактировать</button>}
         <button className="button ghost" onClick={onClose}>Закрыть</button>
@@ -709,8 +695,8 @@ function PersonEditor({ person, people, onSave, onClose }) {
         </div>
         <div className="form-grid">
           <label className="wide">Имя и фамилия<input name="name" value={form.name} onChange={(e) => update("name", e.target.value)} required autoFocus /></label>
-          <label>Год рождения<input name="birth" inputMode="numeric" value={form.birth} onChange={(e) => update("birth", e.target.value)} /></label>
-          <label>Год смерти<input name="death" inputMode="numeric" value={form.death} onChange={(e) => update("death", e.target.value)} /></label>
+          <label>Дата рождения<input name="birth" value={form.birth} onChange={(e) => update("birth", e.target.value)} placeholder="ДД.ММ.ГГГГ" /></label>
+          <label>Дата смерти<input name="death" value={form.death} onChange={(e) => update("death", e.target.value)} placeholder="ДД.ММ.ГГГГ" /></label>
           <label>Поколение<select value={form.generation} onChange={(e) => setForm((current) => ({ ...current, generation: Number(e.target.value), manualGeneration: true }))}>{generationOptions.map((generation) => <option value={generation} key={generation}>{generationLabel(generation)}</option>)}</select></label>
           <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
           <label>Первый родитель<select name="parentId1" value={form.parents?.[0] || ""} onChange={(e) => chooseParent(0, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -1211,26 +1197,6 @@ function App() {
     }
     setEditor(false);
   };
-  const movePerson = (id, direction) => {
-    const card = familyLayout.cards.find((item) => item.person.id === id);
-    if (!card) return;
-    const step = 40;
-    const offset = {
-      left: [-step, 0],
-      right: [step, 0],
-      up: [0, -step],
-      down: [0, step],
-    }[direction];
-    if (!offset) return;
-    commitPeople((current) => {
-      return current.map((person) => person.id === id ? {
-        ...person,
-        manualX: card.x + offset[0],
-        manualY: card.y + offset[1],
-        manualPositionVersion: MANUAL_POSITION_VERSION,
-      } : person);
-    }, "Расположение карточки изменено");
-  };
   const deletePerson = () => {
     if (!deleteCandidate) return;
     const id = deleteCandidate.id;
@@ -1318,7 +1284,7 @@ function App() {
           </div>
         </section>
 
-        <DetailPanel person={selected} people={people} canEdit={canManage} expanded={sheetExpanded} onToggleExpand={() => setSheetExpanded((value) => !value)} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId} onMove={(direction) => movePerson(selected.id, direction)}/>
+        <DetailPanel person={selected} people={people} canEdit={canManage} expanded={sheetExpanded} onToggleExpand={() => setSheetExpanded((value) => !value)} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId}/>
       </main>
       {editor && <PersonEditor person={editor === "new" ? null : editor} people={people} onSave={savePerson} onClose={() => setEditor(false)}/>}
       {deleteCandidate && <ConfirmDelete person={deleteCandidate} onConfirm={deletePerson} onClose={() => setDeleteCandidate(null)}/>}

@@ -244,11 +244,6 @@ dd { margin: 0; }
 .relation-row em { color: var(--terra); font-size: 10px; font-style: normal; font-weight: 700; }
 .relation-row strong { font-size: 12px; font-weight: 650; }
 .relation-row small, .empty-copy { font-size: 11px; color: var(--muted); }
-.placement-section { padding: 18px 0 0; }
-.placement-section p { margin: -4px 0 12px; color: var(--muted); font-size: 11px; }
-.placement-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.placement-controls button { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: transparent; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; font-weight: 650; cursor: pointer; }
-.placement-controls button:hover { border-color: #8b9a7d; background: #f0f2eb; color: var(--green); }
 .detail-actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; padding-top: 22px; }
 .detail-actions > :only-child { grid-column: 1 / -1; }
 .delete-action { width: 100%; margin-top: 13px; padding: 11px; border: 0; border-radius: 8px; background: transparent; color: #9d3f2b; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; cursor: pointer; }
@@ -423,7 +418,6 @@ dd { margin: 0; }
   .detail-heading { padding-top: 5px; cursor: pointer; }
   .detail-heading h2 { font-size: 27px; }
   .detail-panel:not(.is-expanded) .detail-section,
-  .detail-panel:not(.is-expanded) .placement-section,
   .detail-panel:not(.is-expanded) .detail-actions,
   .detail-panel:not(.is-expanded) .delete-action { display: none; }
   .sheet-more { display: flex; width: calc(100% - 48px); margin: 2px 24px 0; padding: 9px 2px; border: 0; border-top: 1px solid var(--line); background: transparent; align-items: center; justify-content: space-between; color: var(--terra); font-size: 12.5px; font-weight: 650; cursor: pointer; }
