@@ -136,10 +136,30 @@ function optimizePhoto(file) {
   });
 }
 
-function Portrait({ person, className }) {
+function BotanicalPortraitFrame() {
   return (
-    <span className={className} aria-hidden="true">
-      {person.photo ? <img className="portrait-image" src={person.photo} alt="" style={{ objectPosition: `${person.photoX ?? 50}% ${person.photoY ?? 50}%`, transform: `scale(${person.photoScale ?? 1})` }}/> : initials(person.name || "?")}
+    <svg className="botanical-portrait-frame" viewBox="0 0 100 136" aria-hidden="true">
+      <path className="vine-stem vine-stem-left" d="M48 133C26 127 12 111 11 89 10 69 19 59 13 43 8 28 20 11 47 3"/>
+      <path className="vine-stem vine-stem-right" d="M52 133C75 126 89 110 89 88 89 68 80 58 87 42 93 27 80 10 53 3"/>
+      <path className="vine-twig" d="M14 49c8-5 14-11 18-19M87 43c-8-4-14-10-19-18M13 91c8 3 15 8 20 16M88 87c-8 4-14 9-18 17"/>
+      <path className="vine-leaf vine-leaf-soft" d="M15 47C4 45 1 37 4 29c9 1 15 7 11 18Z"/>
+      <path className="vine-leaf" d="M25 24C19 13 24 6 32 4c5 8 3 16-7 20Z"/>
+      <path className="vine-leaf" d="M10 81C0 76 0 67 5 60c9 4 12 11 5 21Z"/>
+      <path className="vine-leaf vine-leaf-soft" d="M16 105C6 106 1 99 2 91c9-1 15 4 14 14Z"/>
+      <path className="vine-leaf" d="M84 47c11-2 16-10 13-18-9 1-15 8-13 18Z"/>
+      <path className="vine-leaf vine-leaf-soft" d="M90 80c10-5 10-14 5-21-9 4-12 12-5 21Z"/>
+      <path className="vine-leaf" d="M84 105c10 1 15-6 14-14-9-1-15 4-14 14Z"/>
+    </svg>
+  );
+}
+
+function Portrait({ person, className, botanical = false }) {
+  return (
+    <span className={`${className} ${botanical ? "has-botanical-frame" : ""}`} aria-hidden="true">
+      <span className="portrait-crop">
+        {person.photo ? <img className="portrait-image" src={person.photo} alt="" style={{ objectPosition: `${person.photoX ?? 50}% ${person.photoY ?? 50}%`, transform: `scale(${person.photoScale ?? 1})` }}/> : initials(person.name || "?")}
+      </span>
+      {botanical ? <BotanicalPortraitFrame/> : null}
     </span>
   );
 }
@@ -166,7 +186,7 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
       type="button"
       aria-pressed={selected}
     >
-      <Portrait person={person} className="avatar"/>
+      <Portrait person={person} className="avatar" botanical/>
       <span className="person-copy">
         <strong>{person.name}</strong>
         <span className="person-years">{formatLifespan(person)}</span>
