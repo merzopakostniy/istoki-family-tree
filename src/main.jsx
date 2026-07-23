@@ -1239,7 +1239,7 @@ function App() {
                     }}
                     aria-hidden="true"
                   >
-                    <span>Семья</span>
+                    <span>В браке</span>
                   </div>
                 ))}
                 {familyLayout.generations.map((row) => (
