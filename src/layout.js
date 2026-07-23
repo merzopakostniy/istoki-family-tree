@@ -8,7 +8,8 @@ export const STAGE_BOTTOM = 82;
 export const EMPTY_STAGE_HEIGHT = 770;
 export const MANUAL_POSITION_VERSION = 2;
 export const DEFAULT_CANVAS_MARGIN = 1200;
-export const DEFAULT_CANVAS_VERTICAL_MARGIN = 260;
+export const DEFAULT_CANVAS_TOP_MARGIN = 140;
+export const DEFAULT_CANVAS_BOTTOM_MARGIN = 70;
 
 const SIBLING_UNIT_GAP = 30;
 const BRANCH_UNIT_GAP = 68;
@@ -268,15 +269,20 @@ function alignGenerationFamilies(rows, unitByPersonId, generations) {
 export function buildCanvasFrame(
   layout,
   horizontalMargin = DEFAULT_CANVAS_MARGIN,
-  verticalMargin = DEFAULT_CANVAS_VERTICAL_MARGIN,
+  topMargin = DEFAULT_CANVAS_TOP_MARGIN,
+  bottomMargin = DEFAULT_CANVAS_BOTTOM_MARGIN,
 ) {
   const safeHorizontalMargin = Math.max(0, horizontalMargin);
-  const safeVerticalMargin = Math.max(0, verticalMargin);
+  const safeTopMargin = Math.max(0, topMargin);
+  const safeBottomMargin = Math.max(0, bottomMargin);
+  const hasCards = layout.cards.length > 0;
   return {
     offsetX: safeHorizontalMargin - layout.contentLeft,
-    offsetY: safeVerticalMargin - layout.contentTop,
+    offsetY: safeTopMargin - layout.contentTop,
     width: Math.max(MIN_STAGE_WIDTH, layout.contentWidth + safeHorizontalMargin * 2),
-    height: Math.max(EMPTY_STAGE_HEIGHT, layout.contentHeight + safeVerticalMargin * 2),
+    height: hasCards
+      ? Math.max(360, layout.contentHeight + safeTopMargin + safeBottomMargin)
+      : EMPTY_STAGE_HEIGHT,
   };
 }
 
