@@ -495,7 +495,7 @@ function generationLabel(generation) {
   return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
 }
 
-function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canManage, scale, canvasOffsetX, canvasOffsetY, onDragEnd, canvasGestureRef }) {
+function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canManage, scale, canvasOffsetX, canvasOffsetY, onDragEnd }) {
   const [drag, setDrag] = useState(null);
   const draggedRef = useRef(false);
   const redrawFrame = useRef(null);
@@ -511,19 +511,9 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
   const beginDrag = (event) => {
     if (!canManage || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
-    const start = {
-      x: event.clientX,
-      y: event.clientY,
-      moved: false,
-      pointerId: event.pointerId,
-      pinchVersion: canvasGestureRef.current.pinchVersion,
-    };
+    const start = { x: event.clientX, y: event.clientY, moved: false, pointerId: event.pointerId };
     const onMove = (moveEvent) => {
       if (moveEvent.pointerId !== start.pointerId) return;
-      if (canvasGestureRef.current.pinchVersion !== start.pinchVersion) {
-        setDrag(null);
-        return;
-      }
       const dx = (moveEvent.clientX - start.x) / (scale || 1);
       const dy = (moveEvent.clientY - start.y) / (scale || 1);
       if (!start.moved && Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 4) return;
@@ -537,7 +527,7 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onUp);
-      if (start.moved && canvasGestureRef.current.pinchVersion === start.pinchVersion) {
+      if (start.moved) {
         const dx = (upEvent.clientX - start.x) / (scale || 1);
         const dy = (upEvent.clientY - start.y) / (scale || 1);
         onDragEnd(card.person.id, card.x + dx, card.y + dy);
@@ -973,7 +963,7 @@ function App() {
   const stageRef = useRef(null);
   const boardRef = useRef(null);
   const nodeRefs = useRef(new Map());
-  const canvasGestureRef = useRef({ pointers: new Map(), pan: null, pinch: null, pinchVersion: 0, nativePinch: null });
+  const canvasGestureRef = useRef({ pointers: new Map(), pan: null, pinch: null });
   const pendingViewportRef = useRef(null);
   const selected = people.find((person) => person.id === selectedId) || null;
   const focusIds = selectionFocusIds(people, selectedId);
@@ -1159,7 +1149,6 @@ function App() {
     const board = boardRef.current;
     if (!board) return undefined;
     const handleWheel = (event) => {
-      if (canvasGestureRef.current.nativePinch) return;
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
       event.preventDefault();
       const deltaY = event.deltaMode === 1
@@ -1169,42 +1158,8 @@ function App() {
           : event.deltaY;
       zoomCanvasTo(wheelCanvasScale(scale, deltaY), event.clientX, event.clientY);
     };
-    const handleNativeGestureStart = (event) => {
-      if (canvasGestureRef.current.pointers.size >= 2) return;
-      event.preventDefault();
-      canvasGestureRef.current.pinchVersion += 1;
-      canvasGestureRef.current.nativePinch = { scale };
-      setCanvasPanning(true);
-    };
-    const handleNativeGestureChange = (event) => {
-      const nativePinch = canvasGestureRef.current.nativePinch;
-      if (!nativePinch) return;
-      event.preventDefault();
-      const rect = board.getBoundingClientRect();
-      const clientX = Number.isFinite(event.clientX) && event.clientX
-        ? event.clientX
-        : rect.left + board.clientWidth / 2;
-      const clientY = Number.isFinite(event.clientY) && event.clientY
-        ? event.clientY
-        : rect.top + board.clientHeight / 2;
-      zoomCanvasTo(nativePinch.scale * event.scale, clientX, clientY);
-    };
-    const handleNativeGestureEnd = (event) => {
-      if (!canvasGestureRef.current.nativePinch) return;
-      event.preventDefault();
-      canvasGestureRef.current.nativePinch = null;
-      setCanvasPanning(canvasGestureRef.current.pointers.size > 0);
-    };
     board.addEventListener("wheel", handleWheel, { passive: false });
-    board.addEventListener("gesturestart", handleNativeGestureStart, { passive: false });
-    board.addEventListener("gesturechange", handleNativeGestureChange, { passive: false });
-    board.addEventListener("gestureend", handleNativeGestureEnd, { passive: false });
-    return () => {
-      board.removeEventListener("wheel", handleWheel);
-      board.removeEventListener("gesturestart", handleNativeGestureStart);
-      board.removeEventListener("gesturechange", handleNativeGestureChange);
-      board.removeEventListener("gestureend", handleNativeGestureEnd);
-    };
+    return () => board.removeEventListener("wheel", handleWheel);
   }, [scale]);
   const previousCanvasOrigin = useRef(null);
   useLayoutEffect(() => {
@@ -1231,24 +1186,12 @@ function App() {
     board.scrollTop += stageRect.top + pending.stageY * scale - pending.clientY;
   }, [scale]);
   const startCanvasGesture = (event) => {
+    if ((event.pointerType === "mouse" && event.button !== 0) || event.target.closest(".positioned-person, button, input, textarea, select, a")) return;
     const board = event.currentTarget;
     const gesture = canvasGestureRef.current;
-    const isTouch = event.pointerType === "touch";
-    const isInteractive = Boolean(event.target.closest(".positioned-person, button, input, textarea, select, a"));
-    if ((event.pointerType === "mouse" && event.button !== 0) || (!isTouch && isInteractive)) return;
-    if (isTouch) {
-      gesture.pointers.set(event.pointerId, {
-        x: event.clientX,
-        y: event.clientY,
-        canPan: !isInteractive,
-      });
-      if (gesture.pointers.size === 1 && isInteractive) return;
-    }
     event.preventDefault();
     board.setPointerCapture?.(event.pointerId);
-    if (!gesture.pointers.has(event.pointerId)) {
-      gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, canPan: true });
-    }
+    gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (gesture.pointers.size === 1) {
       gesture.pan = {
         id: event.pointerId,
@@ -1259,15 +1202,12 @@ function App() {
       };
       gesture.pinch = null;
     } else if (gesture.pointers.size === 2) {
-      event.stopPropagation();
       const [first, second] = [...gesture.pointers.values()];
-      [...gesture.pointers.keys()].forEach((pointerId) => board.setPointerCapture?.(pointerId));
       gesture.pan = null;
       gesture.pinch = {
         distance: Math.hypot(second.x - first.x, second.y - first.y),
         scale,
       };
-      gesture.pinchVersion += 1;
     }
     setCanvasPanning(true);
     setSelectedId(null);
@@ -1277,8 +1217,7 @@ function App() {
     const gesture = canvasGestureRef.current;
     if (!gesture.pointers.has(event.pointerId)) return;
     event.preventDefault();
-    const previousPoint = gesture.pointers.get(event.pointerId);
-    gesture.pointers.set(event.pointerId, { ...previousPoint, x: event.clientX, y: event.clientY });
+    gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (gesture.pointers.size >= 2 && gesture.pinch) {
       const [first, second] = [...gesture.pointers.values()];
       const distance = Math.hypot(second.x - first.x, second.y - first.y);
@@ -1287,7 +1226,7 @@ function App() {
       zoomCanvasTo(pinchCanvasScale(gesture.pinch.scale, gesture.pinch.distance, distance), centerX, centerY);
       return;
     }
-    if (gesture.pan?.id === event.pointerId && previousPoint?.canPan !== false) {
+    if (gesture.pan?.id === event.pointerId) {
       board.scrollLeft = gesture.pan.left - (event.clientX - gesture.pan.x);
       board.scrollTop = gesture.pan.top - (event.clientY - gesture.pan.y);
     }
@@ -1443,10 +1382,10 @@ function App() {
             ref={boardRef}
             title="Колесо или щипок — масштаб · потяните пустой фон — перемещение"
             aria-label="Полотно семейного древа"
-            onPointerDownCapture={startCanvasGesture}
-            onPointerMoveCapture={moveCanvasGesture}
-            onPointerUpCapture={endCanvasGesture}
-            onPointerCancelCapture={endCanvasGesture}
+            onPointerDown={startCanvasGesture}
+            onPointerMove={moveCanvasGesture}
+            onPointerUp={endCanvasGesture}
+            onPointerCancel={endCanvasGesture}
           >
             <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${stageHeight * scale}px` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
               <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${stageHeight}px`, transform: `scale(${scale})` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
@@ -1480,7 +1419,7 @@ function App() {
                   </div>
                 ))}
                 <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale} selectedId={selectedId}/>
-                {familyLayout.cards.map((card) => <PositionedPerson key={card.person.id} card={card} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} canvasOffsetX={canvasOffsetX} canvasOffsetY={canvasOffsetY} onDragEnd={handlePersonDrag} canvasGestureRef={canvasGestureRef}/>)}
+                {familyLayout.cards.map((card) => <PositionedPerson key={card.person.id} card={card} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} canvasOffsetX={canvasOffsetX} canvasOffsetY={canvasOffsetY} onDragEnd={handlePersonDrag}/>)}
                 {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
                 </>}
               </div>
