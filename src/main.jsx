@@ -224,6 +224,7 @@ const EMPTY_STAGE_HEIGHT = 770;
 const STAGE_TOP = 28;
 const STAGE_BOTTOM = 54;
 const GENERATION_GAP = 190;
+const CONTOUR_GAP = 60;
 const BRANCH_COLORS = ["#5da97e", "#e0865a", "#6ba9d6", "#dcac48", "#b189bd", "#4fb3a8", "#dd8299", "#8b9bdb", "#a7b563", "#c8945f", "#6cb6cf", "#c47b96"];
 
 function marriageKey(firstId, secondId) {
@@ -290,143 +291,161 @@ function buildFamilyLayout(people) {
     }
   });
 
-  const branchPosition = (parentUnit, childUnit) => {
-    const parentIndex = new Map(parentUnit.people.map((person, index) => [person.id, index]));
-    const positions = childUnit.people.flatMap((person) => person.parents.map((id) => parentIndex.get(id)).filter(Number.isFinite));
-    return positions.length ? positions.reduce((sum, value) => sum + value, 0) / positions.length : parentUnit.people.length / 2;
-  };
-  const childGap = (first, second) => first.primaryMarriageKey && first.primaryMarriageKey === second.primaryMarriageKey ? SIBLING_GAP : MARRIAGE_BRANCH_GAP;
-  units.forEach((unit) => unit.children.sort((first, second) => branchPosition(unit, first) - branchPosition(unit, second) || first.order - second.order));
-
-  // In-law ancestors: a childless top root that is the parents of a person who married into another unit.
-  // Anchor it above that person instead of pushing it to the far right of the stage.
-  const aboveAttachments = new Map();
-  const anchoredRootIds = new Set();
-  units.forEach((root) => {
-    if (root.primaryParentId || root.children.length) return;
-    const memberIds = new Set(root.people.map((person) => person.id));
-    const child = people.find((person) => !memberIds.has(person.id) && person.parents.some((parentId) => memberIds.has(parentId)));
-    const anchorUnit = child && unitByPersonId.get(child.id);
-    if (!anchorUnit || anchorUnit.id === root.id) return;
-    const index = anchorUnit.people.findIndex((person) => person.id === child.id);
-    if (index < 0) return;
-    if (!aboveAttachments.has(anchorUnit.id)) aboveAttachments.set(anchorUnit.id, []);
-    aboveAttachments.get(anchorUnit.id).push({ unit: root, index });
-    anchoredRootIds.add(root.id);
-  });
-
-  const measuring = new Set();
-  const measure = (unit) => {
-    if (unit.subtreeWidth) return unit.subtreeWidth;
-    if (measuring.has(unit.id)) return unit.width;
-    measuring.add(unit.id);
-    const descendantsWidth = unit.children.reduce((sum, child, index) => sum + measure(child) + (index ? childGap(unit.children[index - 1], child) : 0), 0);
-    let subtreeWidth = Math.max(unit.width, descendantsWidth);
-    const coParentUnit = unit.primaryParentId ? unitById.get(unit.primaryParentId) : null;
-    (aboveAttachments.get(unit.id) || []).forEach((attachment) => {
-      const aboveWidth = measure(attachment.unit);
-      // Only reserve room to centre the in-laws over their child when the blood spouse has no
-      // parents on that same row. Otherwise the de-overlap pass parks them beside the blood grandparents.
-      if (coParentUnit && coParentUnit.generation === attachment.unit.generation) return;
-      const spouseCenter = attachment.index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
-      subtreeWidth = Math.max(subtreeWidth, 2 * (Math.abs(spouseCenter - unit.width / 2) + aboveWidth / 2));
-    });
-    unit.subtreeWidth = subtreeWidth;
-    measuring.delete(unit.id);
-    return unit.subtreeWidth;
-  };
-  const placed = new Set();
-  const place = (unit, left) => {
-    if (placed.has(unit.id)) return;
-    placed.add(unit.id);
-    unit.x = left + (unit.subtreeWidth - unit.width) / 2;
-    const descendantsWidth = unit.children.reduce((sum, child, index) => sum + child.subtreeWidth + (index ? childGap(unit.children[index - 1], child) : 0), 0);
-    let childLeft = left + (unit.subtreeWidth - descendantsWidth) / 2;
-    unit.children.forEach((child, index) => {
-      if (index) childLeft += childGap(unit.children[index - 1], child);
-      place(child, childLeft);
-      childLeft += child.subtreeWidth;
-    });
-    (aboveAttachments.get(unit.id) || []).forEach((attachment) => {
-      const spouseCenter = unit.x + attachment.index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
-      place(attachment.unit, spouseCenter - attachment.unit.subtreeWidth / 2);
-    });
-  };
-
-  const roots = units
-    .filter((unit) => !unit.primaryParentId && !anchoredRootIds.has(unit.id))
-    .sort((first, second) => first.order - second.order);
-  roots.forEach(measure);
-  let cursor = STAGE_PADDING;
-  roots.forEach((root) => {
-    place(root, cursor);
-    cursor += root.subtreeWidth + ROOT_FAMILY_GAP;
-  });
-  units.filter((unit) => !placed.has(unit.id)).forEach((unit) => {
-    measure(unit);
-    place(unit, cursor);
-    cursor += unit.subtreeWidth + ROOT_FAMILY_GAP;
-  });
-  // De-overlap: an in-law unit placed under its child may sit on top of the blood grandparents'
-  // row. Park it beside them at the nearest clear slot instead of overlapping.
-  const unitsByGeneration = new Map();
-  units.forEach((unit) => {
-    if (!unitsByGeneration.has(unit.generation)) unitsByGeneration.set(unit.generation, []);
-    unitsByGeneration.get(unit.generation).push(unit);
-  });
-  anchoredRootIds.forEach((rootId) => {
-    const inLaw = unitById.get(rootId);
-    if (!inLaw) return;
-    const neighbours = (unitsByGeneration.get(inLaw.generation) || []).filter((unit) => unit.id !== inLaw.id);
-    const overlaps = (x) => neighbours.some((unit) => x < unit.x + unit.width + ROOT_FAMILY_GAP && x + inLaw.width + ROOT_FAMILY_GAP > unit.x);
-    if (!overlaps(inLaw.x)) return;
-    const desired = inLaw.x;
-    let best = null;
-    neighbours.forEach((unit) => {
-      [unit.x + unit.width + ROOT_FAMILY_GAP, unit.x - inLaw.width - ROOT_FAMILY_GAP].forEach((candidate) => {
-        if (overlaps(candidate)) return;
-        if (best === null || Math.abs(candidate - desired) < Math.abs(best - desired)) best = candidate;
-      });
-    });
-    if (best !== null) inLaw.x = best;
-  });
-
-  // Multi-marriage units otherwise centre over the whole brood, dragging an outlier child's parent
-  // far from that child. Slide such a unit over its largest child branch so at least the main line
-  // stays connected; distant marriages just get longer connectors.
-  units.forEach((unit) => {
-    if (unit.people.length < 3 || !unit.children.length) return;
-    const offsetOf = (personId) => {
-      const index = unit.people.findIndex((person) => person.id === personId);
-      return index < 0 ? null : index * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2;
-    };
-    const primaryChild = unit.children.reduce((best, child) => child.subtreeWidth > (best?.subtreeWidth ?? -1) ? child : best, null);
-    const parentOffsets = primaryChild.people.flatMap((person) => person.parents).map(offsetOf).filter((value) => value != null);
-    if (!parentOffsets.length) return;
-    const parentOffset = parentOffsets.reduce((sum, value) => sum + value, 0) / parentOffsets.length;
-    const desiredX = (primaryChild.x + primaryChild.width / 2) - parentOffset;
-    const neighbours = (unitsByGeneration.get(unit.generation) || []).filter((other) => other.id !== unit.id);
-    const clashes = (x) => neighbours.some((other) => x < other.x + other.width + ROOT_FAMILY_GAP && x + unit.width + ROOT_FAMILY_GAP > other.x);
-    if (!clashes(desiredX)) { unit.x = desiredX; return; }
-    const step = desiredX < unit.x ? -4 : 4;
-    let x = unit.x;
-    for (let guard = 0; guard < 4000; guard += 1) {
-      const nextX = x + step;
-      if ((step < 0 && nextX <= desiredX) || (step > 0 && nextX >= desiredX)) break;
-      if (clashes(nextX)) break;
-      x = nextX;
+  // ── Undirected adjacency over units: A—B if someone in A is a parent of someone in B. ──
+  const neighbours = new Map(units.map((unit) => [unit.id, new Set()]));
+  units.forEach((unit) => unit.people.forEach((person) => person.parents.forEach((parentId) => {
+    const parentUnit = unitByPersonId.get(parentId);
+    if (parentUnit && parentUnit.id !== unit.id) {
+      neighbours.get(unit.id).add(parentUnit.id);
+      neighbours.get(parentUnit.id).add(unit.id);
     }
-    unit.x = x;
+  })));
+
+  // ── Spanning forest: root each connected component at its oldest (lowest-generation) unit, then
+  // BFS outward. Every neighbour — descendant OR a married-in spouse's own ancestor branch — becomes
+  // a child in the spanning tree, so in-law lineages attach right where they connect instead of being
+  // swept to the far side of the stage. ──
+  const treeChildren = new Map(units.map((unit) => [unit.id, []]));
+  const roots = [];
+  const visited = new Set();
+  units.forEach((start) => {
+    if (visited.has(start.id)) return;
+    const component = [];
+    const stack = [start.id];
+    const localSeen = new Set([start.id]);
+    while (stack.length) {
+      const id = stack.pop();
+      component.push(unitById.get(id));
+      neighbours.get(id).forEach((next) => { if (!localSeen.has(next)) { localSeen.add(next); stack.push(next); } });
+    }
+    const root = component.reduce((best, unit) => (unit.generation < best.generation || (unit.generation === best.generation && unit.order < best.order)) ? unit : best, component[0]);
+    roots.push(root);
+    const queue = [root.id];
+    visited.add(root.id);
+    while (queue.length) {
+      const id = queue.shift();
+      [...neighbours.get(id)].forEach((next) => {
+        if (!visited.has(next)) { visited.add(next); treeChildren.get(id).push(unitById.get(next)); queue.push(next); }
+      });
+    }
   });
 
-  // Above-anchored in-law units can reach past the left edge — nudge the whole stage back on screen.
+  // order spanning-tree children by where they attach along the parent's card row, then source order
+  const attachIndex = (parent, child) => {
+    const parentIndex = new Map(parent.people.map((person, index) => [person.id, index]));
+    const indices = [];
+    child.people.forEach((childPerson) => childPerson.parents.forEach((parentId) => { if (parentIndex.has(parentId)) indices.push(parentIndex.get(parentId)); }));
+    parent.people.forEach((parentPerson, index) => parentPerson.parents.forEach((parentId) => { if (child.people.some((childPerson) => childPerson.id === parentId)) indices.push(index); }));
+    return indices.length ? indices.reduce((sum, value) => sum + value, 0) / indices.length : parent.people.length / 2;
+  };
+  units.forEach((parent) => treeChildren.get(parent.id).sort((first, second) => attachIndex(parent, first) - attachIndex(parent, second) || first.order - second.order));
+
+  // ── Contour packing (Reingold–Tilford, keyed by generation-row so branches that share no row stack
+  // vertically instead of spreading sideways). layoutSubtree returns x-offsets (root at 0) plus
+  // left/right contour maps (generation → extreme edge x). ──
+  const shiftContour = (contour, delta) => { const shifted = new Map(); contour.forEach((value, generation) => shifted.set(generation, value + delta)); return shifted; };
+  const layoutSubtree = (unit) => {
+    const half = unit.width / 2;
+    const kids = treeChildren.get(unit.id);
+    if (!kids.length) {
+      return { offsets: new Map([[unit.id, 0]]), left: new Map([[unit.generation, -half]]), right: new Map([[unit.generation, half]]) };
+    }
+    const offsets = new Map();
+    const accLeft = new Map();
+    const accRight = new Map();
+    const kidRootX = [];
+    const kidAttachOffset = [];
+    const kidSpan = [];
+    kids.forEach((kid, index) => {
+      const sub = layoutSubtree(kid);
+      let shift = 0;
+      if (index > 0) {
+        let need = -Infinity;
+        sub.left.forEach((leftEdge, generation) => { if (accRight.has(generation)) need = Math.max(need, accRight.get(generation) + CONTOUR_GAP - leftEdge); });
+        shift = need === -Infinity ? 0 : Math.max(0, need);
+      }
+      sub.offsets.forEach((x, id) => offsets.set(id, x + shift));
+      shiftContour(sub.left, shift).forEach((value, generation) => { if (!accLeft.has(generation) || value < accLeft.get(generation)) accLeft.set(generation, value); });
+      shiftContour(sub.right, shift).forEach((value, generation) => { if (!accRight.has(generation) || value > accRight.get(generation)) accRight.set(generation, value); });
+      kidRootX.push(shift);
+      kidAttachOffset.push(attachIndex(unit, kid) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2 - unit.width / 2);
+      kidSpan.push(Math.max(...sub.right.values()) - Math.min(...sub.left.values()));
+    });
+    // Plain couple: centre over its outer children. Multi-marriage unit: align its largest child
+    // branch under the exact card it attaches to, so that spouse stays beside their own line while
+    // distant marriages just get longer connectors.
+    let parentX;
+    if (unit.people.length >= 3) {
+      let primary = 0;
+      for (let index = 1; index < kids.length; index += 1) if (kidSpan[index] > kidSpan[primary]) primary = index;
+      parentX = kidRootX[primary] - kidAttachOffset[primary];
+    } else {
+      parentX = (kidRootX[0] + kidRootX[kidRootX.length - 1]) / 2;
+    }
+    const finalOffsets = new Map();
+    offsets.forEach((x, id) => finalOffsets.set(id, x - parentX));
+    finalOffsets.set(unit.id, 0);
+    const left = shiftContour(accLeft, -parentX);
+    const right = shiftContour(accRight, -parentX);
+    left.set(unit.generation, Math.min(left.has(unit.generation) ? left.get(unit.generation) : Infinity, -half));
+    right.set(unit.generation, Math.max(right.has(unit.generation) ? right.get(unit.generation) : -Infinity, half));
+    return { offsets: finalOffsets, left, right };
+  };
+
+  // place root subtrees left-to-right, contour-packed against each other (unit.x is CENTRE here)
+  const cursorRight = new Map();
+  roots.forEach((root, index) => {
+    const sub = layoutSubtree(root);
+    let base = STAGE_PADDING - Math.min(...sub.left.values());
+    if (index > 0) {
+      let need = -Infinity;
+      sub.left.forEach((leftEdge, generation) => { if (cursorRight.has(generation)) need = Math.max(need, cursorRight.get(generation) + ROOT_FAMILY_GAP - (base + leftEdge)); });
+      if (need !== -Infinity && need > 0) base += need;
+    }
+    sub.offsets.forEach((x, id) => { unitById.get(id).x = base + x; });
+    sub.right.forEach((value, generation) => { const absolute = base + value; if (!cursorRight.has(generation) || absolute > cursorRight.get(generation)) cursorRight.set(generation, absolute); });
+  });
+
+  // convert centre → left edge for the renderer
+  units.forEach((unit) => { unit.x -= unit.width / 2; });
+
+  // ── Resolve residual same-generation overlaps (fires only where a unit and one of its spanning
+  // ancestors/in-laws share a row, e.g. both spouses have parents) by shifting whole subtrees. ──
+  const subtreeOf = new Map();
+  const computeSubtree = (unit) => {
+    if (subtreeOf.has(unit.id)) return subtreeOf.get(unit.id);
+    const set = new Set([unit.id]);
+    treeChildren.get(unit.id).forEach((child) => computeSubtree(child).forEach((id) => set.add(id)));
+    subtreeOf.set(unit.id, set);
+    return set;
+  };
+  units.forEach(computeSubtree);
+  const shiftSubtree = (unit, delta) => subtreeOf.get(unit.id).forEach((id) => { unitById.get(id).x += delta; });
+  for (let iteration = 0; iteration < 12; iteration += 1) {
+    let moved = false;
+    const byGeneration = new Map();
+    units.forEach((unit) => { if (!byGeneration.has(unit.generation)) byGeneration.set(unit.generation, []); byGeneration.get(unit.generation).push(unit); });
+    for (const row of byGeneration.values()) {
+      row.sort((first, second) => first.x - second.x);
+      for (let index = 0; index < row.length - 1; index += 1) {
+        const left = row[index];
+        const right = row[index + 1];
+        const gap = (left.x + left.width) + CONTOUR_GAP - right.x;
+        if (gap > 0.5) {
+          if (subtreeOf.get(right.id).has(left.id)) shiftSubtree(left, -gap);
+          else shiftSubtree(right, gap);
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  // normalise to stage padding
   let minX = Infinity;
   let maxRight = 0;
-  units.forEach((unit) => {
-    if (unit.x < minX) minX = unit.x;
-    if (unit.x + unit.width > maxRight) maxRight = unit.x + unit.width;
-  });
-  if (Number.isFinite(minX) && minX < STAGE_PADDING) {
+  units.forEach((unit) => { if (unit.x < minX) minX = unit.x; if (unit.x + unit.width > maxRight) maxRight = unit.x + unit.width; });
+  if (Number.isFinite(minX)) {
     const shift = STAGE_PADDING - minX;
     units.forEach((unit) => { unit.x += shift; });
     maxRight += shift;
