@@ -142,13 +142,7 @@ function BotanicalPortraitFrame() {
       <path className="vine-stem vine-stem-left" d="M48 133C26 127 12 111 11 89 10 69 19 59 13 43 8 28 20 11 47 3"/>
       <path className="vine-stem vine-stem-right" d="M52 133C75 126 89 110 89 88 89 68 80 58 87 42 93 27 80 10 53 3"/>
       <path className="vine-twig" d="M14 49c8-5 14-11 18-19M87 43c-8-4-14-10-19-18M13 91c8 3 15 8 20 16M88 87c-8 4-14 9-18 17"/>
-      <path className="vine-leaf vine-leaf-soft" d="M15 47C4 45 1 37 4 29c9 1 15 7 11 18Z"/>
-      <path className="vine-leaf" d="M25 24C19 13 24 6 32 4c5 8 3 16-7 20Z"/>
-      <path className="vine-leaf" d="M10 81C0 76 0 67 5 60c9 4 12 11 5 21Z"/>
-      <path className="vine-leaf vine-leaf-soft" d="M16 105C6 106 1 99 2 91c9-1 15 4 14 14Z"/>
-      <path className="vine-leaf" d="M84 47c11-2 16-10 13-18-9 1-15 8-13 18Z"/>
-      <path className="vine-leaf vine-leaf-soft" d="M90 80c10-5 10-14 5-21-9 4-12 12-5 21Z"/>
-      <path className="vine-leaf" d="M84 105c10 1 15-6 14-14-9-1-15 4-14 14Z"/>
+      <path className="vine-weave" d="M47 3c10 8 21 13 29 25M53 133c-11-7-22-12-30-25"/>
     </svg>
   );
 }
