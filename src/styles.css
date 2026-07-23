@@ -155,31 +155,20 @@ nav { display: flex; align-items: center; gap: 8px; }
 .generation-guide span { position: absolute; left: 0; top: -17px; padding: 2px 8px 2px 0; color: rgba(235,220,184,.55); background: rgba(31,51,38,.76); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .connections { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
 .connections g { transition: opacity .25s ease; }
-.connections path { fill: none; stroke-linejoin: round; vector-effect: non-scaling-stroke; shape-rendering: geometricPrecision; }
-.connections .connection-bark { stroke: #735a39; stroke-width: 4.4; stroke-linecap: round; }
-.connections .connection-vine { stroke: var(--branch-color, var(--green)); stroke-width: 2.15; stroke-linecap: round; }
-.connections .connection-wrap { stroke: rgba(226,207,157,.86); stroke-width: 1.05; stroke-linecap: round; stroke-dasharray: 1 10; }
-.connections .connection-focus { stroke: transparent; stroke-width: 2.6; stroke-linecap: square; }
-.branch-knot { fill: #6f5537; stroke: #c2a975; stroke-width: 1.3; vector-effect: non-scaling-stroke; }
-.branch-node { fill: var(--canvas-dark, var(--paper)); stroke: var(--branch-color, var(--green)); stroke-width: 1.7; vector-effect: non-scaling-stroke; }
+.connections path { fill: none; stroke: var(--branch-color, var(--green)); stroke-width: 1.9; stroke-linecap: square; stroke-linejoin: miter; vector-effect: non-scaling-stroke; shape-rendering: geometricPrecision; }
+.branch-node { fill: var(--canvas-dark, var(--paper)); stroke: var(--branch-color, var(--green)); stroke-width: 2.2; vector-effect: non-scaling-stroke; }
 .connections g.is-dimmed-line { opacity: .15; }
 .connections g.is-distant { opacity: .32; }
 .connections g.is-dimmed-line.is-distant { opacity: .08; }
-.connections g.is-distant .connection-bark { stroke-width: 3; }
-.connections g.is-distant .connection-vine { stroke-width: 1.3; }
-.connections g.is-distant .connection-wrap { opacity: .38; }
-.connections g.is-distant .branch-knot { r: 4.5; }
-.connections g.is-distant .branch-node { r: 2; }
-.connections g.is-flowing .parent-line { stroke: var(--branch-color, var(--green)); stroke-width: 2.6; stroke-dasharray: 7 7; animation: veinFlow 900ms linear infinite; filter: drop-shadow(0 0 4px var(--branch-color)); }
-.connections g.is-flowing .branch-knot { r: 7; filter: drop-shadow(0 0 4px var(--branch-color)); }
-.connections g.is-flowing .branch-node { r: 3.2; }
-.marriage-connection.is-current .connection-bark { stroke-width: 5; }
-.marriage-connection.is-current .connection-vine { stroke-width: 2.6; }
-.marriage-connection.is-former .connection-bark { stroke-width: 3.3; }
-.marriage-connection.is-former .connection-vine { stroke-width: 1.45; }
-.marriage-connection.is-former .connection-wrap { opacity: .42; }
-.marriage-connection.is-focused .marriage-line { stroke: var(--branch-color, var(--green)); stroke-width: 2.6; stroke-dasharray: 7 7; animation: veinFlow 900ms linear infinite; filter: drop-shadow(0 0 4px var(--branch-color)); }
-.marriage-connection .marriage-knot { fill: #6f5537; stroke: var(--branch-color, var(--green)); stroke-width: 1.7; vector-effect: non-scaling-stroke; }
+.connections g.is-distant .parent-line { stroke-width: 1.3; }
+.connections g.is-distant .branch-node { r: 3.5; }
+.connections g.is-flowing .parent-line { stroke-width: 2.6; stroke-dasharray: 7 7; animation: veinFlow 900ms linear infinite; filter: drop-shadow(0 0 4px var(--branch-color)); }
+.connections g.is-flowing .branch-node { r: 6; filter: drop-shadow(0 0 4px var(--branch-color)); }
+.marriage-connection .marriage-line { stroke-width: 2.2; }
+.marriage-connection.is-current .marriage-line { stroke-width: 3; }
+.marriage-connection.is-former .marriage-line { stroke-width: 1.7; }
+.marriage-connection.is-focused .marriage-line { stroke-width: 2.6; stroke-dasharray: 7 7; animation: veinFlow 900ms linear infinite; filter: drop-shadow(0 0 4px var(--branch-color)); }
+.marriage-connection circle { fill: var(--canvas-dark, var(--paper)); stroke: var(--branch-color, var(--green)); stroke-width: 2; vector-effect: non-scaling-stroke; }
 @keyframes veinFlow { to { stroke-dashoffset: -28; } }
 .positioned-person { position: absolute; z-index: 2; animation: familyIn .6s ease-out both; }
 .positioned-person.draggable, .positioned-person.draggable .person-card { cursor: grab; touch-action: none; }
@@ -347,8 +336,7 @@ dd { margin: 0; }
 .zoom-controls button, .zoom-controls output { height: 41px; border-right-color: #d5c8ab; color: #29372a; }
 .zoom-controls .center-button { min-width: 128px; }
 .tree-board { height: calc(100% - 112px); padding: 0 28px 48px; }
-.connections .connection-bark { filter: drop-shadow(0 1px 0 rgba(0,0,0,.34)); }
-.branch-knot { fill: #6a5033; stroke: #d5bd7f; }
+.connections path { stroke-width: 2.1; filter: drop-shadow(0 1px 0 rgba(0,0,0,.34)); }
 .branch-node { fill: #223b2a; stroke: #d5bd7f; }
 .person-card { width: 258px; min-height: 134px; border-color: #c9af7a; border-radius: 7px; background: #f5eedf; box-shadow: 0 1px 0 rgba(255,255,255,.78) inset, var(--card-shadow); padding: 10px 12px 10px 11px; gap: 12px; overflow: visible; }
 .person-card::before { left: 0; right: auto; top: 11px; width: 3px; height: calc(100% - 22px); border-radius: 0 3px 3px 0; background: var(--gold); opacity: .88; }
