@@ -591,7 +591,6 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
           <div><dt>Место рождения</dt><dd>{person.birthplace || "Не указано"}</dd></div>
           <div><dt>Дата смерти</dt><dd>{person.death || "Не указана"}</dd></div>
           <div><dt>Место смерти</dt><dd>{person.deathplace || "Не указано"}</dd></div>
-          <div><dt>Кем приходится</dt><dd>{person.relation || "Не указано"}</dd></div>
           <div><dt>Примечание</dt><dd>{person.note || "Пока нет заметок"}</dd></div>
         </dl>
       </section>
