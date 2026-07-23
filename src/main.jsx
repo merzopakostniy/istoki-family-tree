@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { onAuthStateChanged } from "firebase/auth";
 import { generationMeta } from "./data";
 import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPeople } from "./firebase";
+import { formatLifespan } from "./formatters";
 import { buildCanvasFrame, buildFamilyLayout as buildHierarchyLayout, DEFAULT_CANVAS_MARGIN, MANUAL_POSITION_VERSION } from "./layout";
 import { searchFamilyBranch, selectionFocusIds } from "./relations";
 import "./styles.css";
@@ -34,12 +35,6 @@ function Icon({ name, size = 20 }) {
 
 function initials(name) {
   return name.split(" ").slice(0, 2).map((part) => part[0]).join("");
-}
-
-function years(person) {
-  if (!person.birth && !person.death) return "Нет данных";
-  if (person.birth && person.death) return `${person.birth} — ${person.death}`;
-  return person.birth || `— ${person.death}`;
 }
 
 function normalizePerson(person) {
@@ -174,7 +169,7 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
       <Portrait person={person} className="avatar"/>
       <span className="person-copy">
         <strong>{person.name}</strong>
-        <span className="person-years">{years(person)}</span>
+        <span className="person-years">{formatLifespan(person)}</span>
         {(person.maidenName || person.relation) && <small className="person-role">{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation].filter(Boolean).join(" · ")}</small>}
       </span>
     </button>
@@ -572,7 +567,7 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
       <button className="icon-button detail-close" onClick={onClose} aria-label="Закрыть карточку"><Icon name="close" /></button>
       <div className="detail-heading" onClick={onToggleExpand}>
         <Portrait person={person} className="detail-avatar"/>
-        <div><h2>{person.name}</h2><p>{years(person)}</p></div>
+        <div><h2>{person.name}</h2><p>{formatLifespan(person)}</p></div>
       </div>
       <button className="sheet-more" onClick={onToggleExpand}>
         {expanded ? "Свернуть" : "Место рождения, заметки и связи"}
@@ -595,7 +590,7 @@ function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClos
         <div className="section-title"><h3>Родственные связи</h3></div>
         {related.length ? related.map((relative) => (
           <button key={relative.id} className="relation-row" onClick={() => onSelect(relative.id)}>
-            <span><em>{relationshipLabel(person, relative)}</em><strong>{relative.name}</strong><small>{years(relative)}</small></span><Icon name="chevron" size={17}/>
+            <span><em>{relationshipLabel(person, relative)}</em><strong>{relative.name}</strong><small>{formatLifespan(relative)}</small></span><Icon name="chevron" size={17}/>
           </button>
         )) : <p className="empty-copy">Связи ещё не добавлены.</p>}
       </section>
