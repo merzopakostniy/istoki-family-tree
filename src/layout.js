@@ -31,6 +31,20 @@ function gapBetween(first, second) {
   return sameParentBranch(first, second) ? SIBLING_UNIT_GAP : BRANCH_UNIT_GAP;
 }
 
+function currentPartnerCandidate(person, peopleById, assigned) {
+  const candidateIds = [];
+  if (person.currentPartnerId) candidateIds.push(person.currentPartnerId);
+  person.partnerIds.forEach((partnerId) => {
+    const partner = peopleById.get(partnerId);
+    if (partner?.currentPartnerId === person.id) candidateIds.push(partnerId);
+  });
+  return [...new Set(candidateIds)]
+    .map((id) => peopleById.get(id))
+    .find((partner) => partner
+      && partner.generation === person.generation
+      && !assigned.has(partner.id)) || null;
+}
+
 function createUnits(people) {
   const sourceOrder = new Map(people.map((person, index) => [person.id, index]));
   const peopleById = new Map(people.map((person) => [person.id, person]));
@@ -44,28 +58,8 @@ function createUnits(people) {
 
   people.forEach((person) => {
     if (assigned.has(person.id)) return;
-    const component = [];
-    const queue = [person];
-    const componentIds = new Set();
-    while (queue.length) {
-      const member = queue.shift();
-      if (!member || componentIds.has(member.id) || assigned.has(member.id) || member.generation !== person.generation) continue;
-      componentIds.add(member.id);
-      component.push(member);
-      member.partnerIds.forEach((partnerId) => {
-        const partner = peopleById.get(partnerId);
-        if (partner && !componentIds.has(partner.id) && !assigned.has(partner.id)) queue.push(partner);
-      });
-    }
-    const anchor = component.reduce((best, member) => {
-      if (member.partnerIds.length !== best.partnerIds.length) return member.partnerIds.length > best.partnerIds.length ? member : best;
-      return (sourceOrder.get(member.id) ?? 0) < (sourceOrder.get(best.id) ?? 0) ? member : best;
-    }, component[0]);
-    const currentPartner = component.find((member) => member.id === anchor.currentPartnerId || member.currentPartnerId === anchor.id);
-    const remaining = component
-      .filter((member) => member.id !== anchor.id && member.id !== currentPartner?.id)
-      .sort((first, second) => (sourceOrder.get(first.id) ?? 0) - (sourceOrder.get(second.id) ?? 0));
-    const members = [anchor, currentPartner, ...remaining].filter(Boolean);
+    const currentPartner = currentPartnerCandidate(person, peopleById, assigned);
+    const members = currentPartner ? [person, currentPartner] : [person];
     members.forEach((member) => assigned.add(member.id));
     const primaryMember = members
       .filter((member) => member.parents.length)
@@ -74,8 +68,8 @@ function createUnits(people) {
         const secondKey = [...second.parents].sort().join("--");
         const branchDifference = (parentBranchSize.get(secondKey) || 0) - (parentBranchSize.get(firstKey) || 0);
         if (branchDifference) return branchDifference;
-        if (first.id === anchor.id) return -1;
-        if (second.id === anchor.id) return 1;
+        if (first.id === person.id) return -1;
+        if (second.id === person.id) return 1;
         return (sourceOrder.get(first.id) ?? 0) - (sourceOrder.get(second.id) ?? 0);
       })[0];
     const primaryParents = primaryMember?.parents || [];
@@ -152,11 +146,11 @@ function orderRows(rows, unitById, generations) {
 
   for (let pass = 0; pass < 10; pass += 1) {
     for (let index = 1; index < generations.length; index += 1) {
-      sortRow(rows.get(generations[index]), "children");
+      sortRow(rows.get(generations[index]), "parents");
       updateRanks();
     }
     for (let index = generations.length - 2; index >= 0; index -= 1) {
-      sortRow(rows.get(generations[index]), "parents");
+      sortRow(rows.get(generations[index]), "children");
       updateRanks();
     }
   }
@@ -206,7 +200,7 @@ function compactRows(rows, unitById, generations) {
   }
 }
 
-function removeHorizontalDrift(rows, unitById, generations) {
+function packRowsAroundFamilies(rows, unitById, generations) {
   rows.forEach((row) => {
     const previousCentre = average(row.map((unit) => unit.x + unit.width / 2)) || 0;
     let cursor = 0;
@@ -240,12 +234,41 @@ function removeHorizontalDrift(rows, unitById, generations) {
   }
 }
 
+function alignGenerationFamilies(rows, unitByPersonId, generations) {
+  const personCentre = (unit, personId) => {
+    const index = unit.people.findIndex((person) => person.id === personId);
+    return unit.x + index * (CARD_WIDTH + COUPLE_GAP) + CARD_WIDTH / 2;
+  };
+  generations.slice(1).forEach((generation) => {
+    const row = rows.get(generation);
+    const families = new Map();
+    row.forEach((unit) => unit.people.forEach((person) => {
+      const parentKey = [...person.parents].sort().join("--");
+      if (!parentKey) return;
+      if (!families.has(parentKey)) families.set(parentKey, []);
+      families.get(parentKey).push(personCentre(unit, person.id));
+    }));
+    const deltas = [];
+    families.forEach((childCentres, parentKey) => {
+      const parentCentres = parentKey.split("--").flatMap((parentId) => {
+        const parentUnit = unitByPersonId.get(parentId);
+        return parentUnit ? [personCentre(parentUnit, parentId)] : [];
+      });
+      if (!parentCentres.length) return;
+      const childCentre = (Math.min(...childCentres) + Math.max(...childCentres)) / 2;
+      deltas.push(average(parentCentres) - childCentre);
+    });
+    const rowShift = median(deltas) || 0;
+    row.forEach((unit) => { unit.x += rowShift; });
+  });
+}
+
 export function buildFamilyLayout(people) {
   if (!people.length) {
     return { units: [], cards: [], clusters: [], generations: [], width: MIN_STAGE_WIDTH, height: EMPTY_STAGE_HEIGHT };
   }
 
-  const { units } = createUnits(people);
+  const { units, unitByPersonId } = createUnits(people);
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const generationNumbers = [...new Set(units.map((unit) => unit.generation))].sort((first, second) => first - second);
   const highestGeneration = Math.max(...generationNumbers);
@@ -257,7 +280,8 @@ export function buildFamilyLayout(people) {
 
   orderRows(rows, unitById, generationNumbers);
   compactRows(rows, unitById, generationNumbers);
-  removeHorizontalDrift(rows, unitById, generationNumbers);
+  packRowsAroundFamilies(rows, unitById, generationNumbers);
+  alignGenerationFamilies(rows, unitByPersonId, generationNumbers);
 
   let minimumAutoX = Infinity;
   units.forEach((unit) => { minimumAutoX = Math.min(minimumAutoX, unit.x); });

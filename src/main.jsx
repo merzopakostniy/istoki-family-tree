@@ -790,19 +790,6 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
       };
       const parentOrigin = (parentIds) => {
         if (parentIds.length === 1) return point(parentIds[0], "top");
-        const parentPeople = parentIds.map((id) => peopleById.get(id)).filter(Boolean);
-        const anchor = parentPeople.reduce((best, person) => person.partnerIds.length > best.partnerIds.length ? person : best, parentPeople[0]);
-        const partner = parentPeople.find((person) => person.id !== anchor?.id);
-        const anchorRect = anchor ? nodes.current.get(anchor.id)?.getBoundingClientRect() : null;
-        const partnerRect = partner ? nodes.current.get(partner.id)?.getBoundingClientRect() : null;
-        if (anchorRect && partnerRect && anchor.partnerIds.length > 2) {
-          const anchorCenter = anchorRect.left + anchorRect.width / 2;
-          const partnerCenter = partnerRect.left + partnerRect.width / 2;
-          const adjacentLimit = (anchorRect.width + partnerRect.width) / 2 + PARTNER_CONNECTOR_WIDTH * scale * 1.5;
-          if (Math.abs(anchorCenter - partnerCenter) > adjacentLimit) {
-            return point(partner.id, "top");
-          }
-        }
         const parentPoints = parentIds.map((parentId) => point(parentId, "center")).filter(Boolean);
         if (!parentPoints.length) return null;
         return {

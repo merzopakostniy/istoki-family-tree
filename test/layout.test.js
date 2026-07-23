@@ -23,6 +23,10 @@ function person(id, generation, options = {}) {
   };
 }
 
+function assertClose(actual, expected, message) {
+  assert.ok(Math.abs(actual - expected) < .001, `${message}: expected ${expected}, received ${actual}`);
+}
+
 test("current spouses form one close pair while siblings remain on one compact branch", () => {
   const people = [
     person("father", 0, { partnerIds: ["mother"], currentPartnerId: "mother" }),
@@ -36,7 +40,7 @@ test("current spouses form one close pair while siblings remain on one compact b
   const cards = new Map(layout.cards.map((card) => [card.person.id, card]));
 
   assert.equal(cards.get("father").y, cards.get("mother").y);
-  assert.equal(Math.abs(cards.get("father").x - cards.get("mother").x), CARD_WIDTH + COUPLE_GAP);
+  assertClose(Math.abs(cards.get("father").x - cards.get("mother").x), CARD_WIDTH + COUPLE_GAP, "current spouses must stay adjacent");
   assert.equal(cards.get("child-a").y, cards.get("child-b").y);
   assert.equal(cards.get("child-b").y, cards.get("child-c").y);
 
@@ -44,9 +48,12 @@ test("current spouses form one close pair while siblings remain on one compact b
     .filter((unit) => unit.people.some((member) => ["child-a", "child-b", "child-c"].includes(member.id)))
     .sort((first, second) => first.x - second.x);
   assert.deepEqual(siblingUnits.flatMap((unit) => unit.people.map((member) => member.id)).filter((id) => id.startsWith("child-")), ["child-a", "child-b", "child-c"]);
+  const parentCentre = (cards.get("father").x + CARD_WIDTH / 2 + cards.get("mother").x + CARD_WIDTH / 2) / 2;
+  const childCentres = ["child-a", "child-b", "child-c"].map((id) => cards.get(id).x + CARD_WIDTH / 2);
+  assertClose((Math.min(...childCentres) + Math.max(...childCentres)) / 2, parentCentre, "children must be centred over their parents");
 });
 
-test("former spouses remain in one visible family while every card keeps its own manual position", () => {
+test("only the current marriage forms a family background while former spouses stay separate", () => {
   const people = [
     person("anchor", 1, {
       partnerIds: ["current", "former-a", "former-b"],
@@ -75,11 +82,32 @@ test("former spouses remain in one visible family while every card keeps its own
   const currentCard = layout.cards.find((card) => card.person.id === "current");
   const formerCard = layout.cards.find((card) => card.person.id === "former-a");
 
-  assert.equal(units.length, 1);
-  assert.deepEqual(units[0].people.map((member) => member.id), ["anchor", "current", "former-a", "former-b"]);
-  assert.equal(Math.abs(anchorCard.x - currentCard.x), CARD_WIDTH + COUPLE_GAP);
+  assert.equal(units.length, 3);
+  assert.deepEqual(units.find((unit) => unit.people.length === 2).people.map((member) => member.id), ["anchor", "current"]);
+  assertClose(Math.abs(anchorCard.x - currentCard.x), CARD_WIDTH + COUPLE_GAP, "current spouses must stay adjacent");
   assert.equal(layout.clusters.length, 1);
+  assert.deepEqual(layout.clusters[0].people.map((member) => member.id), ["anchor", "current"]);
   assert.deepEqual({ x: formerCard.x, y: formerCard.y }, { x: 320, y: 280 });
+});
+
+test("a child of a former marriage is centred over both separate parents", () => {
+  const people = [
+    person("former-parent-a", 0, {
+      partnerIds: ["former-parent-b"],
+      formerPartnerIds: ["former-parent-b"],
+    }),
+    person("former-parent-b", 0, {
+      partnerIds: ["former-parent-a"],
+      formerPartnerIds: ["former-parent-a"],
+    }),
+    person("child", 1, { parents: ["former-parent-a", "former-parent-b"] }),
+  ];
+  const layout = buildFamilyLayout(people);
+  const cards = new Map(layout.cards.map((card) => [card.person.id, card]));
+  const parentCentre = (cards.get("former-parent-a").x + CARD_WIDTH / 2 + cards.get("former-parent-b").x + CARD_WIDTH / 2) / 2;
+
+  assertClose(cards.get("child").x + CARD_WIDTH / 2, parentCentre, "child must sit over the former couple midpoint");
+  assert.equal(layout.clusters.length, 0);
 });
 
 test("legacy group coordinates are ignored instead of scattering the rebuilt hierarchy", () => {
