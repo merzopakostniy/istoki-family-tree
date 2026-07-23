@@ -1241,7 +1241,7 @@ function App() {
       <main id="tree" className="workspace">
         <section className={`tree-area ${selected ? "has-detail" : ""}`} aria-label="Семейное древо">
           <div className="canvas-heading">
-            <div><h1>Семейное древо</h1><p>Начните с самых дальних известных предков</p></div>
+            <div><h1>Семейное древо</h1></div>
             <div className="zoom-controls" aria-label="Масштаб">
               <button onClick={() => setScale((value) => Math.max(.08, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
               <output>{Math.round(scale * 100)}%</output>
