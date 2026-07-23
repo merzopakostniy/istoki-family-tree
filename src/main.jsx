@@ -975,6 +975,7 @@ function App() {
   const nodeRefs = useRef(new Map());
   const canvasGestureRef = useRef({ pointers: new Map(), pan: null, pinch: null, pinchVersion: 0, nativePinch: null });
   const pendingViewportRef = useRef(null);
+  const queuedZoomRef = useRef({ frame: null, request: null, lastPaint: 0 });
   const selected = people.find((person) => person.id === selectedId) || null;
   const focusIds = selectionFocusIds(people, selectedId);
   const ownerSignedIn = isOwnerUser(authUser);
@@ -1117,6 +1118,26 @@ function App() {
     const rect = board.getBoundingClientRect();
     zoomCanvasTo(scale + amount, rect.left + board.clientWidth / 2, rect.top + board.clientHeight / 2);
   };
+  const queueCanvasZoom = (nextScale, clientX, clientY) => {
+    const queued = queuedZoomRef.current;
+    queued.request = { nextScale, clientX, clientY };
+    if (queued.frame != null) return;
+    const flush = (timestamp) => {
+      if (timestamp - queued.lastPaint < 28) {
+        queued.frame = requestAnimationFrame(flush);
+        return;
+      }
+      const request = queued.request;
+      queued.request = null;
+      queued.frame = null;
+      queued.lastPaint = timestamp;
+      if (request) zoomCanvasTo(request.nextScale, request.clientX, request.clientY);
+    };
+    queued.frame = requestAnimationFrame(flush);
+  };
+  useEffect(() => () => {
+    if (queuedZoomRef.current.frame != null) cancelAnimationFrame(queuedZoomRef.current.frame);
+  }, []);
   const treeScale = () => {
     const board = boardRef.current;
     if (!board) return null;
@@ -1187,7 +1208,7 @@ function App() {
       const clientY = Number.isFinite(event.clientY) && event.clientY
         ? event.clientY
         : rect.top + board.clientHeight / 2;
-      zoomCanvasTo(nativePinch.scale * event.scale, clientX, clientY);
+      queueCanvasZoom(nativePinch.scale * event.scale, clientX, clientY);
     };
     const handleNativeGestureEnd = (event) => {
       if (!canvasGestureRef.current.nativePinch) return;
@@ -1234,7 +1255,15 @@ function App() {
     const board = event.currentTarget;
     const gesture = canvasGestureRef.current;
     const isTouch = event.pointerType === "touch";
-    const isInteractive = Boolean(event.target.closest(".positioned-person, button, input, textarea, select, a"));
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    const isInteractive = Boolean(target?.closest?.(".positioned-person, button, input, textarea, select, a"));
+    const safelyCapturePointer = (pointerId) => {
+      try {
+        if (board.isConnected && board.setPointerCapture) board.setPointerCapture(pointerId);
+      } catch {
+        // Mobile Safari may reject capture while a second finger is joining.
+      }
+    };
     if ((event.pointerType === "mouse" && event.button !== 0) || (!isTouch && isInteractive)) return;
     if (isTouch) {
       gesture.pointers.set(event.pointerId, {
@@ -1245,7 +1274,7 @@ function App() {
       if (gesture.pointers.size === 1 && isInteractive) return;
     }
     event.preventDefault();
-    board.setPointerCapture?.(event.pointerId);
+    safelyCapturePointer(event.pointerId);
     if (!gesture.pointers.has(event.pointerId)) {
       gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, canPan: true });
     }
@@ -1261,7 +1290,6 @@ function App() {
     } else if (gesture.pointers.size === 2) {
       event.stopPropagation();
       const [first, second] = [...gesture.pointers.values()];
-      [...gesture.pointers.keys()].forEach((pointerId) => board.setPointerCapture?.(pointerId));
       gesture.pan = null;
       gesture.pinch = {
         distance: Math.hypot(second.x - first.x, second.y - first.y),
@@ -1284,7 +1312,7 @@ function App() {
       const distance = Math.hypot(second.x - first.x, second.y - first.y);
       const centerX = (first.x + second.x) / 2;
       const centerY = (first.y + second.y) / 2;
-      zoomCanvasTo(pinchCanvasScale(gesture.pinch.scale, gesture.pinch.distance, distance), centerX, centerY);
+      queueCanvasZoom(pinchCanvasScale(gesture.pinch.scale, gesture.pinch.distance, distance), centerX, centerY);
       return;
     }
     if (gesture.pan?.id === event.pointerId && previousPoint?.canPan !== false) {
@@ -1296,7 +1324,11 @@ function App() {
     const board = event.currentTarget;
     const gesture = canvasGestureRef.current;
     gesture.pointers.delete(event.pointerId);
-    if (board.hasPointerCapture?.(event.pointerId)) board.releasePointerCapture(event.pointerId);
+    try {
+      if (board.hasPointerCapture?.(event.pointerId)) board.releasePointerCapture(event.pointerId);
+    } catch {
+      // The browser can release touch capture before pointercancel reaches React.
+    }
     gesture.pinch = null;
     const remaining = [...gesture.pointers.entries()];
     if (remaining.length === 1) {
