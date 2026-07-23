@@ -770,6 +770,17 @@ function ConfirmDelete({ person, onConfirm, onClose }) {
   );
 }
 
+function WovenConnection({ d, type }) {
+  return (
+    <>
+      <path d={d} className={`connection-bark ${type}-bark`}/>
+      <path d={d} className={`connection-vine ${type}-vine`}/>
+      <path d={d} className={`connection-wrap ${type}-wrap`}/>
+      <path d={d} className={`connection-focus ${type}-line`}/>
+    </>
+  );
+}
+
 function TreeConnections({ people, nodes, stage, scale, selectedId }) {
   const [paths, setPaths] = useState([]);
   const [marriages, setMarriages] = useState([]);
@@ -928,9 +939,9 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
             className={`marriage-connection ${marriage.current ? "is-current" : ""} ${marriage.former ? "is-former" : ""} ${isFocused ? "is-focused" : ""} ${selectedPerson && !isFocused ? "is-dimmed-line" : ""}`}
             style={{ "--branch-color": marriage.color }}
           >
-            <path d={marriage.d} className="marriage-line"/>
-            <circle cx={marriage.nodeX - 4} cy={marriage.nodeY} r="4.5"/>
-            <circle cx={marriage.nodeX + 4} cy={marriage.nodeY} r="4.5"/>
+            <WovenConnection d={marriage.d} type="marriage"/>
+            <circle className="marriage-knot" cx={marriage.nodeX - 4} cy={marriage.nodeY} r="4.5"/>
+            <circle className="marriage-knot" cx={marriage.nodeX + 4} cy={marriage.nodeY} r="4.5"/>
           </g>
         );
       })}
@@ -942,8 +953,9 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         const classes = [isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : "", path.distant && !isFlow ? "is-distant" : ""].filter(Boolean).join(" ");
         return (
           <g key={path.id} className={classes} style={{ "--branch-color": path.color }}>
-            <path d={path.d} className="parent-line"/>
-            <circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="5"/>
+            <WovenConnection d={path.d} type="parent"/>
+            <circle className="branch-knot" cx={path.nodeX} cy={path.nodeY} r="6"/>
+            <circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="2.7"/>
           </g>
         );
       })}
