@@ -1085,18 +1085,16 @@ function App() {
     const board = boardRef.current;
     if (board) board.scrollTo({ left: Math.max(0, (board.scrollWidth - board.clientWidth) / 2), top: 0, behavior });
   };
-  const treeScale = (comfortable = false) => {
+  const treeScale = () => {
     const board = boardRef.current;
     if (!board) return null;
     const widthScale = (board.clientWidth - 40) / stageWidth;
     const heightScale = (board.clientHeight - 40) / familyLayout.height;
-    const fittedScale = comfortable
-      ? Math.max(.42, Math.min(.72, heightScale))
-      : Math.max(.08, Math.min(1, widthScale, heightScale));
+    const fittedScale = Math.max(.08, Math.min(1, widthScale, heightScale));
     return +fittedScale.toFixed(2);
   };
   const fitTree = () => {
-    const fittedScale = treeScale(false);
+    const fittedScale = treeScale();
     if (fittedScale != null) setScale(fittedScale);
   };
   const didAutoFit = useRef(false);
@@ -1106,8 +1104,8 @@ function App() {
     if (!board || !board.clientWidth) return;
     didAutoFit.current = true;
     const frame = requestAnimationFrame(() => {
-      const comfortableScale = treeScale(true);
-      if (comfortableScale != null) setScale(comfortableScale);
+      const fittedScale = treeScale();
+      if (fittedScale != null) setScale(fittedScale);
     });
     return () => cancelAnimationFrame(frame);
   }, [people.length, stageWidth, familyLayout.height]);
@@ -1241,6 +1239,22 @@ function App() {
                     {canManage ? <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button> : <button className="button ghost" onClick={handleOwnerAccess}><Icon name="cloud"/>Войти владельцу</button>}
                   </div>
                 ) : <>
+                {familyLayout.clusters.map((cluster) => (
+                  <div
+                    className="family-cluster"
+                    key={cluster.id}
+                    style={{
+                      "--family-color": branchColor(cluster.id),
+                      left: `${cluster.x - 14}px`,
+                      top: `${cluster.y - 14}px`,
+                      width: `${cluster.width + 28}px`,
+                      height: `${cluster.height + 28}px`,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <span>Семья</span>
+                  </div>
+                ))}
                 {familyLayout.generations.map((row) => (
                   <div className="generation-guide" key={row.generation} style={{ top: `${row.y - 24}px` }} aria-hidden="true">
                     <span>{generationLabel(row.generation)}</span>

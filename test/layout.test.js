@@ -46,11 +46,16 @@ test("current spouses form one close pair while siblings remain on one compact b
   assert.deepEqual(siblingUnits.flatMap((unit) => unit.people.map((member) => member.id)).filter((id) => id.startsWith("child-")), ["child-a", "child-b", "child-c"]);
 });
 
-test("former spouses stay independent and any one card can keep a new manual position", () => {
+test("former spouses remain in one visible family while every card keeps its own manual position", () => {
   const people = [
     person("anchor", 1, {
-      partnerIds: ["former-a", "former-b"],
+      partnerIds: ["current", "former-a", "former-b"],
+      currentPartnerId: "current",
       formerPartnerIds: ["former-a", "former-b"],
+    }),
+    person("current", 1, {
+      partnerIds: ["anchor"],
+      currentPartnerId: "anchor",
     }),
     person("former-a", 1, {
       partnerIds: ["anchor"],
@@ -65,10 +70,15 @@ test("former spouses stay independent and any one card can keep a new manual pos
     }),
   ];
   const layout = buildFamilyLayout(people);
-  const units = layout.units.filter((unit) => unit.people.some((member) => ["anchor", "former-a", "former-b"].includes(member.id)));
+  const units = layout.units.filter((unit) => unit.people.some((member) => ["anchor", "current", "former-a", "former-b"].includes(member.id)));
+  const anchorCard = layout.cards.find((card) => card.person.id === "anchor");
+  const currentCard = layout.cards.find((card) => card.person.id === "current");
   const formerCard = layout.cards.find((card) => card.person.id === "former-a");
 
-  assert.equal(units.length, 3);
+  assert.equal(units.length, 1);
+  assert.deepEqual(units[0].people.map((member) => member.id), ["anchor", "current", "former-a", "former-b"]);
+  assert.equal(Math.abs(anchorCard.x - currentCard.x), CARD_WIDTH + COUPLE_GAP);
+  assert.equal(layout.clusters.length, 1);
   assert.deepEqual({ x: formerCard.x, y: formerCard.y }, { x: 320, y: 280 });
 });
 
