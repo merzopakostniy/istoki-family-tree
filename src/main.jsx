@@ -409,6 +409,34 @@ function buildFamilyLayout(people) {
   // convert centre → left edge for the renderer
   units.forEach((unit) => { unit.x -= unit.width / 2; });
 
+  // ── Spread the spouse chain: give each spouse card a variable gap so it sits over the branches
+  // that attach to that person (their own children, and a married-in spouse's own parents), instead
+  // of sliding the whole unit off-centre. Partners who share all their children stay snug. ──
+  const STEP = CARD_WIDTH + PARTNER_CONNECTOR_WIDTH;
+  units.forEach((unit) => {
+    const count = unit.people.length;
+    unit.gaps = new Array(Math.max(0, count - 1)).fill(PARTNER_CONNECTOR_WIDTH);
+    if (count < 2) return;
+    const kids = treeChildren.get(unit.id);
+    if (!kids.length) return;
+    const targets = unit.people.map((person) => {
+      const centres = [];
+      kids.forEach((child) => {
+        const attaches = child.people.some((childPerson) => childPerson.parents.includes(person.id)) || person.parents.some((parentId) => child.people.some((childPerson) => childPerson.id === parentId));
+        if (attaches) centres.push(child.x + child.width / 2);
+      });
+      return centres.length ? centres.reduce((sum, value) => sum + value, 0) / centres.length : null;
+    });
+    if (targets.every((target) => target === null)) return;
+    const left = unit.people.map((_person, index) => targets[index] != null ? targets[index] - CARD_WIDTH / 2 : unit.x + index * STEP);
+    for (let index = 1; index < count; index += 1) left[index] = Math.max(left[index], left[index - 1] + STEP);
+    for (let index = count - 2; index >= 0; index -= 1) if (targets[index] == null) left[index] = Math.min(left[index], left[index + 1] - STEP);
+    const minLeft = Math.min(...left);
+    unit.x = minLeft;
+    unit.width = Math.max(...left) + CARD_WIDTH - minLeft;
+    for (let index = 1; index < count; index += 1) unit.gaps[index - 1] = left[index] - (left[index - 1] + CARD_WIDTH);
+  });
+
   // ── Resolve residual same-generation overlaps (fires only where a unit and one of its spanning
   // ancestors/in-laws share a row, e.g. both spouses have parents) by shifting whole subtrees. ──
   const subtreeOf = new Map();
@@ -464,7 +492,9 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
   const extraMarriages = anchor.partnerIds
     .map((partnerId) => unit.people.findIndex((person) => person.id === partnerId))
     .filter((partnerIndex) => partnerIndex >= 0 && Math.abs(partnerIndex - anchorIndex) > 1);
-  const gapCenter = (leftIndex) => leftIndex * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH + PARTNER_CONNECTOR_WIDTH / 2;
+  const gaps = unit.gaps || [];
+  const cardLeft = (index) => index * CARD_WIDTH + gaps.slice(0, index).reduce((sum, value) => sum + value, 0);
+  const gapCenter = (leftIndex) => cardLeft(leftIndex) + CARD_WIDTH + (gaps[leftIndex] ?? PARTNER_CONNECTOR_WIDTH) / 2;
   const unitColor = branchColor(unit.primaryMarriageKey || unit.id);
   const currentMarriage = unit.people
     .map((person) => [person, unit.people.find((item) => item.id === person.currentPartnerId)])
@@ -474,8 +504,8 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
     : null;
   const currentMarriageFrame = currentMarriageIndices && currentMarriageIndices[1] - currentMarriageIndices[0] === 1
     ? {
-      left: `${currentMarriageIndices[0] * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) - 14}px`,
-      width: `${CARD_WIDTH * 2 + PARTNER_CONNECTOR_WIDTH + 28}px`,
+      left: `${cardLeft(currentMarriageIndices[0]) - 14}px`,
+      width: `${cardLeft(currentMarriageIndices[1]) + CARD_WIDTH - cardLeft(currentMarriageIndices[0]) + 28}px`,
       "--marriage-color": branchColor(marriageKey(currentMarriage[0].id, currentMarriage[1].id)),
     }
     : null;
@@ -505,7 +535,7 @@ function FamilyUnit({ unit, selectedId, focusIds, onSelect, register }) {
         })}
       </svg> : null}
       {unit.people.map((person, index) => <React.Fragment key={person.id}>
-        {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" style={{ "--family-color": branchColor(marriageKey(unit.people[index - 1].id, person.id)) }} role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer"/> : null}
+        {index > 0 ? arePartners(unit.people[index - 1], person) ? <span className="partner-connector" style={{ width: `${gaps[index - 1] ?? PARTNER_CONNECTOR_WIDTH}px`, "--family-color": branchColor(marriageKey(unit.people[index - 1].id, person.id)) }} role="img" aria-label="Супруги"><i/><i/></span> : <span className="partner-spacer" style={{ width: `${gaps[index - 1] ?? PARTNER_CONNECTOR_WIDTH}px` }}/> : null}
         <PersonCard person={person} selected={person.id === selectedId} focus={focusIds ? (focusIds.has(person.id) ? (person.id === selectedId ? "" : "on") : "dim") : ""} onSelect={onSelect} register={register}/>
       </React.Fragment>)}
     </div>
