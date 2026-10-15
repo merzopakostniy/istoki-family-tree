@@ -16,18 +16,25 @@ const BRANCH_UNIT_GAP = 68;
 const MIN_STAGE_WIDTH = 940;
 
 function average(values) {
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  return values.length
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : null;
 }
 
 function median(values) {
   if (!values.length) return null;
   const sorted = [...values].sort((first, second) => first - second);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 function sameParentBranch(first, second) {
-  return Boolean(first.primaryParentKey && first.primaryParentKey === second.primaryParentKey);
+  return Boolean(
+    first.primaryParentKey &&
+    first.primaryParentKey === second.primaryParentKey,
+  );
 }
 
 function gapBetween(first, second) {
@@ -41,15 +48,22 @@ function currentPartnerCandidate(person, peopleById, assigned) {
     const partner = peopleById.get(partnerId);
     if (partner?.currentPartnerId === person.id) candidateIds.push(partnerId);
   });
-  return [...new Set(candidateIds)]
-    .map((id) => peopleById.get(id))
-    .find((partner) => partner
-      && partner.generation === person.generation
-      && !assigned.has(partner.id)) || null;
+  return (
+    [...new Set(candidateIds)]
+      .map((id) => peopleById.get(id))
+      .find(
+        (partner) =>
+          partner &&
+          partner.generation === person.generation &&
+          !assigned.has(partner.id),
+      ) || null
+  );
 }
 
 function createUnits(people) {
-  const sourceOrder = new Map(people.map((person, index) => [person.id, index]));
+  const sourceOrder = new Map(
+    people.map((person, index) => [person.id, index]),
+  );
   const peopleById = new Map(people.map((person) => [person.id, person]));
   const parentBranchSize = new Map();
   people.forEach((person) => {
@@ -61,7 +75,11 @@ function createUnits(people) {
 
   people.forEach((person) => {
     if (assigned.has(person.id)) return;
-    const currentPartner = currentPartnerCandidate(person, peopleById, assigned);
+    const currentPartner = currentPartnerCandidate(
+      person,
+      peopleById,
+      assigned,
+    );
     const members = currentPartner ? [person, currentPartner] : [person];
     members.forEach((member) => assigned.add(member.id));
     const primaryMember = members
@@ -69,19 +87,30 @@ function createUnits(people) {
       .sort((first, second) => {
         const firstKey = [...first.parents].sort().join("--");
         const secondKey = [...second.parents].sort().join("--");
-        const branchDifference = (parentBranchSize.get(secondKey) || 0) - (parentBranchSize.get(firstKey) || 0);
+        const branchDifference =
+          (parentBranchSize.get(secondKey) || 0) -
+          (parentBranchSize.get(firstKey) || 0);
         if (branchDifference) return branchDifference;
         if (first.id === person.id) return -1;
         if (second.id === person.id) return 1;
-        return (sourceOrder.get(first.id) ?? 0) - (sourceOrder.get(second.id) ?? 0);
+        return (
+          (sourceOrder.get(first.id) ?? 0) - (sourceOrder.get(second.id) ?? 0)
+        );
       })[0];
     const primaryParents = primaryMember?.parents || [];
     units.push({
-      id: members.map((member) => member.id).sort().join("--"),
+      id: members
+        .map((member) => member.id)
+        .sort()
+        .join("--"),
       people: members,
       generation: person.generation,
-      width: members.length * CARD_WIDTH + Math.max(0, members.length - 1) * COUPLE_GAP,
-      order: Math.min(...members.map((member) => sourceOrder.get(member.id) ?? 0)),
+      width:
+        members.length * CARD_WIDTH +
+        Math.max(0, members.length - 1) * COUPLE_GAP,
+      order: Math.min(
+        ...members.map((member) => sourceOrder.get(member.id) ?? 0),
+      ),
       primaryParentKey: [...primaryParents].sort().join("--"),
       parents: new Set(),
       children: new Set(),
@@ -92,7 +121,9 @@ function createUnits(people) {
   });
 
   const unitByPersonId = new Map();
-  units.forEach((unit) => unit.people.forEach((person) => unitByPersonId.set(person.id, unit)));
+  units.forEach((unit) =>
+    unit.people.forEach((person) => unitByPersonId.set(person.id, unit)),
+  );
   units.forEach((unit) => {
     unit.people.forEach((person) => {
       person.parents.forEach((parentId) => {
@@ -116,33 +147,61 @@ function createUnits(people) {
 function branchBlocks(row) {
   const grouped = new Map();
   row.forEach((unit) => {
-    const key = unit.primaryParentKey ? `family:${unit.primaryParentKey}` : `unit:${unit.id}`;
+    const key = unit.primaryParentKey
+      ? `family:${unit.primaryParentKey}`
+      : `unit:${unit.id}`;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(unit);
   });
-  return [...grouped.values()].map((units) => units.sort((first, second) => first.order - second.order));
+  return [...grouped.values()].map((units) =>
+    units.sort((first, second) => first.order - second.order),
+  );
 }
 
 function orderRows(rows, unitById, generations) {
   const rank = new Map();
-  const updateRanks = () => rows.forEach((row) => row.forEach((unit, index) => rank.set(unit.id, index)));
+  const updateRanks = () =>
+    rows.forEach((row) =>
+      row.forEach((unit, index) => rank.set(unit.id, index)),
+    );
   updateRanks();
 
   const targetFor = (unit, direction) => {
     const ids = direction === "parents" ? unit.parents : unit.children;
-    const structural = [...ids].map((id) => rank.get(id)).filter(Number.isFinite);
-    const spouse = [...unit.partners].map((id) => rank.get(id)).filter(Number.isFinite);
-    return median([...structural, ...spouse.map((value) => value * .35 + (rank.get(unit.id) ?? 0) * .65)]);
+    const structural = [...ids]
+      .map((id) => rank.get(id))
+      .filter(Number.isFinite);
+    const spouse = [...unit.partners]
+      .map((id) => rank.get(id))
+      .filter(Number.isFinite);
+    return median([
+      ...structural,
+      ...spouse.map((value) => value * 0.35 + (rank.get(unit.id) ?? 0) * 0.65),
+    ]);
   };
   const sortRow = (row, direction) => {
     const blocks = branchBlocks(row);
     blocks.sort((first, second) => {
-      const firstTarget = average(first.map((unit) => targetFor(unit, direction)).filter(Number.isFinite));
-      const secondTarget = average(second.map((unit) => targetFor(unit, direction)).filter(Number.isFinite));
-      if (firstTarget != null && secondTarget != null && Math.abs(firstTarget - secondTarget) > .001) return firstTarget - secondTarget;
+      const firstTarget = average(
+        first.map((unit) => targetFor(unit, direction)).filter(Number.isFinite),
+      );
+      const secondTarget = average(
+        second
+          .map((unit) => targetFor(unit, direction))
+          .filter(Number.isFinite),
+      );
+      if (
+        firstTarget != null &&
+        secondTarget != null &&
+        Math.abs(firstTarget - secondTarget) > 0.001
+      )
+        return firstTarget - secondTarget;
       if (firstTarget != null && secondTarget == null) return -1;
       if (firstTarget == null && secondTarget != null) return 1;
-      return Math.min(...first.map((unit) => unit.order)) - Math.min(...second.map((unit) => unit.order));
+      return (
+        Math.min(...first.map((unit) => unit.order)) -
+        Math.min(...second.map((unit) => unit.order))
+      );
     });
     row.splice(0, row.length, ...blocks.flat());
   };
@@ -168,7 +227,9 @@ function compactRows(rows, unitById, generations) {
       cursor += unit.width;
     });
     const centre = cursor / 2;
-    row.forEach((unit) => { unit.x -= centre; });
+    row.forEach((unit) => {
+      unit.x -= centre;
+    });
   });
 
   const neighbourCentres = (unit) => {
@@ -180,40 +241,63 @@ function compactRows(rows, unitById, generations) {
       .map((id) => unitById.get(id))
       .filter(Boolean)
       .map((item) => item.x + item.width / 2);
-    return [...structural, ...partners.map((value) => value * .45 + (unit.x + unit.width / 2) * .55)];
+    return [
+      ...structural,
+      ...partners.map(
+        (value) => value * 0.45 + (unit.x + unit.width / 2) * 0.55,
+      ),
+    ];
   };
 
   for (let pass = 0; pass < 18; pass += 1) {
     const direction = pass % 2 ? [...generations].reverse() : generations;
     direction.forEach((generation) => {
       const row = rows.get(generation);
-      const targets = row.map((unit) => average(neighbourCentres(unit)) ?? (unit.x + unit.width / 2));
+      const targets = row.map(
+        (unit) => average(neighbourCentres(unit)) ?? unit.x + unit.width / 2,
+      );
       for (let index = 0; index < row.length; index += 1) {
         const desiredLeft = targets[index] - row[index].width / 2;
-        const minimumLeft = index ? row[index - 1].x + row[index - 1].width + gapBetween(row[index - 1], row[index]) : -Infinity;
+        const minimumLeft = index
+          ? row[index - 1].x +
+            row[index - 1].width +
+            gapBetween(row[index - 1], row[index])
+          : -Infinity;
         row[index].x = Math.max(desiredLeft, minimumLeft);
       }
       for (let index = row.length - 2; index >= 0; index -= 1) {
-        const maximumLeft = row[index + 1].x - gapBetween(row[index], row[index + 1]) - row[index].width;
+        const maximumLeft =
+          row[index + 1].x -
+          gapBetween(row[index], row[index + 1]) -
+          row[index].width;
         row[index].x = Math.min(row[index].x, maximumLeft);
       }
-      const correction = average(row.map((unit, index) => targets[index] - (unit.x + unit.width / 2))) || 0;
-      row.forEach((unit) => { unit.x += correction; });
+      const correction =
+        average(
+          row.map((unit, index) => targets[index] - (unit.x + unit.width / 2)),
+        ) || 0;
+      row.forEach((unit) => {
+        unit.x += correction;
+      });
     });
   }
 }
 
 function packRowsAroundFamilies(rows, unitById, generations) {
   rows.forEach((row) => {
-    const previousCentre = average(row.map((unit) => unit.x + unit.width / 2)) || 0;
+    const previousCentre =
+      average(row.map((unit) => unit.x + unit.width / 2)) || 0;
     let cursor = 0;
     row.forEach((unit, index) => {
       if (index) cursor += gapBetween(row[index - 1], unit);
       unit.x = cursor;
       cursor += unit.width;
     });
-    const packedCentre = average(row.map((unit) => unit.x + unit.width / 2)) || 0;
-    row.forEach((unit) => { unit.x += previousCentre - packedCentre; });
+    const packedCentre =
+      average(row.map((unit) => unit.x + unit.width / 2)) || 0;
+    row.forEach((unit) => {
+      unit.x += previousCentre - packedCentre;
+    });
   });
 
   for (let pass = 0; pass < 12; pass += 1) {
@@ -225,14 +309,17 @@ function packRowsAroundFamilies(rows, unitById, generations) {
         const centre = unit.x + unit.width / 2;
         [...unit.parents, ...unit.children].forEach((id) => {
           const neighbour = unitById.get(id);
-          if (neighbour) deltas.push(neighbour.x + neighbour.width / 2 - centre);
+          if (neighbour)
+            deltas.push(neighbour.x + neighbour.width / 2 - centre);
         });
       });
       shifts.set(generation, median(deltas) || 0);
     });
     generations.forEach((generation) => {
-      const delta = shifts.get(generation) * .55;
-      rows.get(generation).forEach((unit) => { unit.x += delta; });
+      const delta = shifts.get(generation) * 0.55;
+      rows.get(generation).forEach((unit) => {
+        unit.x += delta;
+      });
     });
   }
 }
@@ -245,12 +332,14 @@ function alignGenerationFamilies(rows, unitByPersonId, generations) {
   generations.slice(1).forEach((generation) => {
     const row = rows.get(generation);
     const families = new Map();
-    row.forEach((unit) => unit.people.forEach((person) => {
-      const parentKey = [...person.parents].sort().join("--");
-      if (!parentKey) return;
-      if (!families.has(parentKey)) families.set(parentKey, []);
-      families.get(parentKey).push(personCentre(unit, person.id));
-    }));
+    row.forEach((unit) =>
+      unit.people.forEach((person) => {
+        const parentKey = [...person.parents].sort().join("--");
+        if (!parentKey) return;
+        if (!families.has(parentKey)) families.set(parentKey, []);
+        families.get(parentKey).push(personCentre(unit, person.id));
+      }),
+    );
     const deltas = [];
     families.forEach((childCentres, parentKey) => {
       const parentCentres = parentKey.split("--").flatMap((parentId) => {
@@ -258,11 +347,14 @@ function alignGenerationFamilies(rows, unitByPersonId, generations) {
         return parentUnit ? [personCentre(parentUnit, parentId)] : [];
       });
       if (!parentCentres.length) return;
-      const childCentre = (Math.min(...childCentres) + Math.max(...childCentres)) / 2;
+      const childCentre =
+        (Math.min(...childCentres) + Math.max(...childCentres)) / 2;
       deltas.push(average(parentCentres) - childCentre);
     });
     const rowShift = median(deltas) || 0;
-    row.forEach((unit) => { unit.x += rowShift; });
+    row.forEach((unit) => {
+      unit.x += rowShift;
+    });
   });
 }
 
@@ -279,7 +371,10 @@ export function buildCanvasFrame(
   return {
     offsetX: safeHorizontalMargin - layout.contentLeft,
     offsetY: safeTopMargin - layout.contentTop,
-    width: Math.max(MIN_STAGE_WIDTH, layout.contentWidth + safeHorizontalMargin * 2),
+    width: Math.max(
+      MIN_STAGE_WIDTH,
+      layout.contentWidth + safeHorizontalMargin * 2,
+    ),
     height: hasCards
       ? Math.max(360, layout.contentHeight + safeTopMargin + safeBottomMargin)
       : EMPTY_STAGE_HEIGHT,
@@ -306,13 +401,19 @@ export function buildFamilyLayout(people) {
 
   const { units, unitByPersonId } = createUnits(people);
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
-  const generationNumbers = [...new Set(units.map((unit) => unit.generation))].sort((first, second) => first - second);
+  const generationNumbers = [
+    ...new Set(units.map((unit) => unit.generation)),
+  ].sort((first, second) => first - second);
   const highestGeneration = Math.max(...generationNumbers);
   const lowestGeneration = Math.min(...generationNumbers);
-  const rows = new Map(generationNumbers.map((generation) => [
-    generation,
-    units.filter((unit) => unit.generation === generation).sort((first, second) => first.order - second.order),
-  ]));
+  const rows = new Map(
+    generationNumbers.map((generation) => [
+      generation,
+      units
+        .filter((unit) => unit.generation === generation)
+        .sort((first, second) => first.order - second.order),
+    ]),
+  );
 
   orderRows(rows, unitById, generationNumbers);
   compactRows(rows, unitById, generationNumbers);
@@ -320,25 +421,32 @@ export function buildFamilyLayout(people) {
   alignGenerationFamilies(rows, unitByPersonId, generationNumbers);
 
   let minimumAutoX = Infinity;
-  units.forEach((unit) => { minimumAutoX = Math.min(minimumAutoX, unit.x); });
+  units.forEach((unit) => {
+    minimumAutoX = Math.min(minimumAutoX, unit.x);
+  });
   const normaliseX = STAGE_PADDING - minimumAutoX;
   units.forEach((unit) => {
     unit.x += normaliseX;
-    unit.y = STAGE_TOP + (highestGeneration - unit.generation) * GENERATION_GAP;
+    unit.y = STAGE_TOP + (unit.generation - lowestGeneration) * GENERATION_GAP;
   });
 
   const cards = [];
-  units.forEach((unit) => unit.people.forEach((person, index) => {
-    const hasCurrentManualPosition = person.manualPositionVersion === MANUAL_POSITION_VERSION
-      && Number.isFinite(person.manualX)
-      && Number.isFinite(person.manualY);
-    cards.push({
-      person,
-      unitId: unit.id,
-      x: hasCurrentManualPosition ? person.manualX : unit.x + index * (CARD_WIDTH + COUPLE_GAP),
-      y: hasCurrentManualPosition ? person.manualY : unit.y,
-    });
-  }));
+  units.forEach((unit) =>
+    unit.people.forEach((person, index) => {
+      const hasCurrentManualPosition =
+        person.manualPositionVersion === MANUAL_POSITION_VERSION &&
+        Number.isFinite(person.manualX) &&
+        Number.isFinite(person.manualY);
+      cards.push({
+        person,
+        unitId: unit.id,
+        x: hasCurrentManualPosition
+          ? person.manualX
+          : unit.x + index * (CARD_WIDTH + COUPLE_GAP),
+        y: hasCurrentManualPosition ? person.manualY : unit.y,
+      });
+    }),
+  );
 
   const contentLeft = Math.min(...cards.map((card) => card.x));
   const contentTop = Math.min(...cards.map((card) => card.y));
@@ -347,14 +455,27 @@ export function buildFamilyLayout(people) {
   const contentWidth = contentRight - contentLeft;
   const contentHeight = contentBottom - contentTop;
   const cardByPersonId = new Map(cards.map((card) => [card.person.id, card]));
-  const clusters = units.filter((unit) => unit.people.length > 1).map((unit) => {
-    const memberCards = unit.people.map((person) => cardByPersonId.get(person.id)).filter(Boolean);
-    const left = Math.min(...memberCards.map((card) => card.x));
-    const right = Math.max(...memberCards.map((card) => card.x + CARD_WIDTH));
-    const top = Math.min(...memberCards.map((card) => card.y));
-    const bottom = Math.max(...memberCards.map((card) => card.y + CARD_HEIGHT));
-    return { id: unit.id, people: unit.people, x: left, y: top, width: right - left, height: bottom - top };
-  });
+  const clusters = units
+    .filter((unit) => unit.people.length > 1)
+    .map((unit) => {
+      const memberCards = unit.people
+        .map((person) => cardByPersonId.get(person.id))
+        .filter(Boolean);
+      const left = Math.min(...memberCards.map((card) => card.x));
+      const right = Math.max(...memberCards.map((card) => card.x + CARD_WIDTH));
+      const top = Math.min(...memberCards.map((card) => card.y));
+      const bottom = Math.max(
+        ...memberCards.map((card) => card.y + CARD_HEIGHT),
+      );
+      return {
+        id: unit.id,
+        people: unit.people,
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+      };
+    });
   return {
     units,
     cards,
@@ -365,11 +486,20 @@ export function buildFamilyLayout(people) {
     contentBottom,
     contentWidth,
     contentHeight,
-    generations: generationNumbers.map((generation) => ({
-      generation,
-      y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
-    })).sort((first, second) => first.y - second.y),
+    generations: generationNumbers
+      .map((generation) => ({
+        generation,
+        y: STAGE_TOP + (generation - lowestGeneration) * GENERATION_GAP,
+      }))
+      .sort((first, second) => first.y - second.y),
     width: Math.max(MIN_STAGE_WIDTH, contentWidth + STAGE_PADDING * 2),
-    height: Math.max(EMPTY_STAGE_HEIGHT, contentHeight + STAGE_TOP + STAGE_BOTTOM, STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM),
+    height: Math.max(
+      EMPTY_STAGE_HEIGHT,
+      contentHeight + STAGE_TOP + STAGE_BOTTOM,
+      STAGE_TOP +
+        (highestGeneration - lowestGeneration) * GENERATION_GAP +
+        CARD_HEIGHT +
+        STAGE_BOTTOM,
+    ),
   };
 }

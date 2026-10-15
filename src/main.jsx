@@ -1,59 +1,194 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import { onAuthStateChanged } from "firebase/auth";
 import { generationMeta } from "./data";
-import { auth, isOwnerUser, signInOwner, signOutOwner, subscribeToPeople, syncPeople } from "./firebase";
-import { formatLifespan } from "./formatters";
-import { buildCanvasFrame, buildFamilyLayout as buildHierarchyLayout, DEFAULT_CANVAS_MARGIN, MANUAL_POSITION_VERSION } from "./layout";
-import { searchFamilyBranch, selectionFocusIds } from "./relations";
+import {
+  auth,
+  isOwnerUser,
+  signInOwner,
+  signOutOwner,
+  subscribeToPeople,
+  syncPeople,
+} from "./firebase";
+import { formatLifespan, dateSortValue } from "./formatters";
+import {
+  buildCanvasFrame,
+  buildFamilyLayout as buildHierarchyLayout,
+  DEFAULT_CANVAS_MARGIN,
+  MANUAL_POSITION_VERSION,
+} from "./layout";
+import {
+  searchFamilyBranch,
+  selectionFocusIds,
+  directRelatives,
+  relationshipLabel,
+} from "./relations";
 import "./styles.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
-const FIT_PADDING = 160;
+const FIT_PADDING = 38;
 
 function Icon({ name, size = 20 }) {
   const paths = {
-    tree: <><path d="M12 3v18M7 7c0-2 2-4 5-4s5 2 5 4-2 4-5 4-5-2-5-4Z"/><path d="M5 13c0-1.7 1.5-3 3.4-3 1.8 0 3.6 1.3 3.6 3s-1.8 3-3.6 3C6.5 16 5 14.7 5 13Zm7 2.5c0-1.9 1.7-3.5 3.8-3.5s3.7 1.6 3.7 3.5-1.6 3.5-3.7 3.5-3.8-1.6-3.8-3.5Z"/></>,
-    users: <><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.3-4 2.2-6 5.5-6s5.2 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M16.5 14c2.5.2 3.8 1.8 4 5"/></>,
-    book: <><path d="M4 5.5C7 4 9.5 4.3 12 6v14c-2.5-1.7-5-2-8-.5v-14Z"/><path d="M20 5.5C17 4 14.5 4.3 12 6v14c2.5-1.7 5-2 8-.5v-14Z"/></>,
-    plus: <path d="M12 5v14M5 12h14"/>,
-    search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></>,
-    close: <path d="m6 6 12 12M18 6 6 18"/>,
-    edit: <><path d="m4 20 4.2-1 10.6-10.6-3.2-3.2L5 15.8 4 20Z"/><path d="m13.8 7 3.2 3.2"/></>,
-    target: <><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></>,
-    chevron: <path d="m9 6 6 6-6 6"/>,
-    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
-    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
-    cloud: <><path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.4-1.7A4.8 4.8 0 0 0 7 18Z"/><path d="m9 13 2 2 4-4"/></>,
+    photo: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="8" cy="9" r="1.5" />
+        <path d="m3 17 5-5 4 4 4-6 5 7" />
+      </>
+    ),
+    list: (
+      <>
+        <path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1" />
+      </>
+    ),
+    user: (
+      <>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+      </>
+    ),
+    help: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1-1.5 2M12 17h.01" />
+      </>
+    ),
+    download: (
+      <>
+        <path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" />
+      </>
+    ),
+    tree: (
+      <>
+        <path d="M12 3v18M7 7c0-2 2-4 5-4s5 2 5 4-2 4-5 4-5-2-5-4Z" />
+        <path d="M5 13c0-1.7 1.5-3 3.4-3 1.8 0 3.6 1.3 3.6 3s-1.8 3-3.6 3C6.5 16 5 14.7 5 13Zm7 2.5c0-1.9 1.7-3.5 3.8-3.5s3.7 1.6 3.7 3.5-1.6 3.5-3.7 3.5-3.8-1.6-3.8-3.5Z" />
+      </>
+    ),
+    users: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3.5 19c.3-4 2.2-6 5.5-6s5.2 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M16.5 14c2.5.2 3.8 1.8 4 5" />
+      </>
+    ),
+    book: (
+      <>
+        <path d="M4 5.5C7 4 9.5 4.3 12 6v14c-2.5-1.7-5-2-8-.5v-14Z" />
+        <path d="M20 5.5C17 4 14.5 4.3 12 6v14c2.5-1.7 5-2 8-.5v-14Z" />
+      </>
+    ),
+    plus: <path d="M12 5v14M5 12h14" />,
+    search: (
+      <>
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m16 16 4 4" />
+      </>
+    ),
+    close: <path d="m6 6 12 12M18 6 6 18" />,
+    edit: (
+      <>
+        <path d="m4 20 4.2-1 10.6-10.6-3.2-3.2L5 15.8 4 20Z" />
+        <path d="m13.8 7 3.2 3.2" />
+      </>
+    ),
+    target: (
+      <>
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="1.5" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      </>
+    ),
+    chevron: <path d="m9 6 6 6-6 6" />,
+    settings: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6" />
+      </>
+    ),
+    cloud: (
+      <>
+        <path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.4-1.7A4.8 4.8 0 0 0 7 18Z" />
+        <path d="m9 13 2 2 4-4" />
+      </>
+    ),
   };
-  return <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return (
+    <svg
+      aria-hidden="true"
+      className="icon"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths[name]}
+    </svg>
+  );
 }
 
 function initials(name) {
-  return name.split(" ").slice(0, 2).map((part) => part[0]).join("");
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("");
 }
 
 function normalizePerson(person) {
-  const { occupation: _removedOccupation, partnerId: legacyPartnerId, ...clean } = person;
-  const partnerIds = Array.isArray(clean.partnerIds) ? clean.partnerIds : legacyPartnerId ? [legacyPartnerId] : [];
+  const {
+    occupation: _removedOccupation,
+    partnerId: legacyPartnerId,
+    ...clean
+  } = person;
+  const partnerIds = Array.isArray(clean.partnerIds)
+    ? clean.partnerIds
+    : legacyPartnerId
+      ? [legacyPartnerId]
+      : [];
   return {
     id: clean.id || "",
     name: clean.name || "",
     birth: clean.birth || "",
     death: clean.death || "",
     relation: clean.relation || "",
-    generation: Number.isFinite(clean.generation) ? Math.max(0, Math.round(clean.generation)) : 0,
+    generation: Number.isFinite(clean.generation)
+      ? Math.max(0, Math.round(clean.generation))
+      : 0,
     parents: Array.isArray(clean.parents) ? clean.parents : [],
     partnerIds: [...new Set(partnerIds.filter(Boolean))],
     currentPartnerId: clean.currentPartnerId || "",
-    formerPartnerIds: [...new Set((Array.isArray(clean.formerPartnerIds) ? clean.formerPartnerIds : []).filter(Boolean))],
+    formerPartnerIds: [
+      ...new Set(
+        (Array.isArray(clean.formerPartnerIds)
+          ? clean.formerPartnerIds
+          : []
+        ).filter(Boolean),
+      ),
+    ],
     birthplace: clean.birthplace || "",
     deathplace: clean.deathplace || "",
     maidenName: clean.maidenName || "",
     manualGeneration: Boolean(clean.manualGeneration),
     manualX: Number.isFinite(clean.manualX) ? clean.manualX : null,
     manualY: Number.isFinite(clean.manualY) ? clean.manualY : null,
-    manualPositionVersion: Number.isFinite(clean.manualPositionVersion) ? clean.manualPositionVersion : 0,
+    manualPositionVersion: Number.isFinite(clean.manualPositionVersion)
+      ? clean.manualPositionVersion
+      : 0,
     note: clean.note || "",
     photo: clean.photo || "",
     photoX: Number.isFinite(clean.photoX) ? clean.photoX : 50,
@@ -66,37 +201,43 @@ function normalizePeople(people) {
   const normalized = people.map(normalizePerson);
   const byId = new Map(normalized.map((person) => [person.id, person]));
   normalized.forEach((person) => {
-    person.partnerIds = person.partnerIds.filter((id) => id !== person.id && byId.has(id));
+    person.partnerIds = person.partnerIds.filter(
+      (id) => id !== person.id && byId.has(id),
+    );
     person.partnerIds.forEach((partnerId) => {
       const partner = byId.get(partnerId);
-      if (!partner.partnerIds.includes(person.id)) partner.partnerIds.push(person.id);
+      if (!partner.partnerIds.includes(person.id))
+        partner.partnerIds.push(person.id);
     });
-    if (!person.partnerIds.includes(person.currentPartnerId)) person.currentPartnerId = "";
-    person.formerPartnerIds = person.formerPartnerIds.filter((id) => person.partnerIds.includes(id) && id !== person.currentPartnerId);
+    if (!person.partnerIds.includes(person.currentPartnerId))
+      person.currentPartnerId = "";
+    person.formerPartnerIds = person.formerPartnerIds.filter(
+      (id) => person.partnerIds.includes(id) && id !== person.currentPartnerId,
+    );
   });
   const maxPasses = Math.min(normalized.length + 2, 64);
   for (let pass = 0; pass < maxPasses; pass += 1) {
     normalized.forEach((person) => {
-      const parentGenerations = person.parents.map((id) => byId.get(id)?.generation).filter(Number.isFinite);
+      const parentGenerations = person.parents
+        .map((id) => byId.get(id)?.generation)
+        .filter(Number.isFinite);
       if (parentGenerations.length) {
         const highestParent = Math.max(...parentGenerations);
         const requiredGeneration = highestParent + 1;
-        if (!person.manualGeneration || person.generation <= highestParent) person.generation = requiredGeneration;
+        if (!person.manualGeneration || person.generation <= highestParent)
+          person.generation = requiredGeneration;
       }
       person.partnerIds.forEach((partnerId) => {
         const partner = byId.get(partnerId);
-        if (partner) person.generation = partner.generation = Math.max(person.generation, partner.generation);
+        if (partner)
+          person.generation = partner.generation = Math.max(
+            person.generation,
+            partner.generation,
+          );
       });
     });
   }
   return normalized;
-}
-
-function relationshipLabel(person, relative) {
-  if (person.partnerIds.includes(relative.id) || relative.partnerIds.includes(person.id)) return "Супруг / супруга";
-  if (person.parents.includes(relative.id)) return "Родитель";
-  if (relative.parents.includes(person.id)) return "Ребёнок";
-  return relative.relation || "Родственник";
 }
 
 function optimizePhoto(file) {
@@ -116,7 +257,10 @@ function optimizePhoto(file) {
       image.onerror = () => reject(new Error("Не удалось открыть фото"));
       image.onload = () => {
         const maxSide = 640;
-        const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const ratio = Math.min(
+          1,
+          maxSide / Math.max(image.naturalWidth, image.naturalHeight),
+        );
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
         canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
@@ -124,7 +268,7 @@ function optimizePhoto(file) {
         context.fillStyle = "#f7f5ef";
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", .76));
+        resolve(canvas.toDataURL("image/jpeg", 0.76));
       };
       image.src = reader.result;
     };
@@ -134,22 +278,53 @@ function optimizePhoto(file) {
 
 function BotanicalPortraitFrame() {
   return (
-    <svg className="botanical-portrait-frame" viewBox="0 0 100 136" aria-hidden="true">
-      <path className="vine-stem vine-stem-left" d="M48 133C26 127 12 111 11 89 10 69 19 59 13 43 8 28 20 11 47 3"/>
-      <path className="vine-stem vine-stem-right" d="M52 133C75 126 89 110 89 88 89 68 80 58 87 42 93 27 80 10 53 3"/>
-      <path className="vine-twig" d="M14 49c8-5 14-11 18-19M87 43c-8-4-14-10-19-18M13 91c8 3 15 8 20 16M88 87c-8 4-14 9-18 17"/>
-      <path className="vine-weave" d="M47 3c10 8 21 13 29 25M53 133c-11-7-22-12-30-25"/>
+    <svg
+      className="botanical-portrait-frame"
+      viewBox="0 0 100 136"
+      aria-hidden="true"
+    >
+      <path
+        className="vine-stem vine-stem-left"
+        d="M48 133C26 127 12 111 11 89 10 69 19 59 13 43 8 28 20 11 47 3"
+      />
+      <path
+        className="vine-stem vine-stem-right"
+        d="M52 133C75 126 89 110 89 88 89 68 80 58 87 42 93 27 80 10 53 3"
+      />
+      <path
+        className="vine-twig"
+        d="M14 49c8-5 14-11 18-19M87 43c-8-4-14-10-19-18M13 91c8 3 15 8 20 16M88 87c-8 4-14 9-18 17"
+      />
+      <path
+        className="vine-weave"
+        d="M47 3c10 8 21 13 29 25M53 133c-11-7-22-12-30-25"
+      />
     </svg>
   );
 }
 
 function Portrait({ person, className, botanical = false }) {
   return (
-    <span className={`${className} ${botanical ? "has-botanical-frame" : ""}`} aria-hidden="true">
+    <span
+      className={`${className} ${botanical ? "has-botanical-frame" : ""}`}
+      aria-hidden="true"
+    >
       <span className="portrait-crop">
-        {person.photo ? <img className="portrait-image" src={person.photo} alt="" style={{ objectPosition: `${person.photoX ?? 50}% ${person.photoY ?? 50}%`, transform: `scale(${person.photoScale ?? 1})` }}/> : initials(person.name || "?")}
+        {person.photo ? (
+          <img
+            className="portrait-image"
+            src={person.photo}
+            alt=""
+            style={{
+              objectPosition: `${person.photoX ?? 50}% ${person.photoY ?? 50}%`,
+              transform: `scale(${person.photoScale ?? 1})`,
+            }}
+          />
+        ) : (
+          initials(person.name || "?")
+        )}
       </span>
-      {botanical ? <BotanicalPortraitFrame/> : null}
+      {botanical ? <BotanicalPortraitFrame /> : null}
     </span>
   );
 }
@@ -157,8 +332,8 @@ function Portrait({ person, className, botanical = false }) {
 function PersonCard({ person, selected, focus, onSelect, register }) {
   const tilt = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const px = (event.clientX - rect.left) / rect.width - .5;
-    const py = (event.clientY - rect.top) / rect.height - .5;
+    const px = (event.clientX - rect.left) / rect.width - 0.5;
+    const py = (event.clientY - rect.top) / rect.height - 0.5;
     event.currentTarget.style.setProperty("--tilt-x", (-py * 10).toFixed(2));
     event.currentTarget.style.setProperty("--tilt-y", (px * 10).toFixed(2));
   };
@@ -176,11 +351,23 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
       type="button"
       aria-pressed={selected}
     >
-      <Portrait person={person} className="avatar" botanical/>
+      <Portrait person={person} className="avatar" />
       <span className="person-copy">
         <strong>{person.name}</strong>
         <span className="person-years">{formatLifespan(person)}</span>
-        {(person.maidenName || person.relation) && <small className="person-role">{[person.maidenName ? `урожд. ${person.maidenName}` : "", person.relation].filter(Boolean).join(" · ")}</small>}
+        {(person.maidenName || person.relation) && (
+          <small className="person-role">
+            {[
+              person.maidenName ? `урожд. ${person.maidenName}` : "",
+              person.relation,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        )}
+        {person.birthplace && (
+          <small className="person-place">{person.birthplace}</small>
+        )}
       </span>
     </button>
   );
@@ -198,7 +385,20 @@ const STAGE_TOP = 28;
 const STAGE_BOTTOM = 54;
 const GENERATION_GAP = 190;
 const CONTOUR_GAP = 60;
-const BRANCH_COLORS = ["#5da97e", "#e0865a", "#6ba9d6", "#dcac48", "#b189bd", "#4fb3a8", "#dd8299", "#8b9bdb", "#a7b563", "#c8945f", "#6cb6cf", "#c47b96"];
+const BRANCH_COLORS = [
+  "#5da97e",
+  "#e0865a",
+  "#6ba9d6",
+  "#dcac48",
+  "#b189bd",
+  "#4fb3a8",
+  "#dd8299",
+  "#8b9bdb",
+  "#a7b563",
+  "#c8945f",
+  "#6cb6cf",
+  "#c47b96",
+];
 
 function marriageKey(firstId, secondId) {
   return [firstId, secondId].filter(Boolean).sort().join("--");
@@ -206,73 +406,118 @@ function marriageKey(firstId, secondId) {
 
 function branchColor(key) {
   let hash = 0;
-  for (const character of key || "family") hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  for (const character of key || "family")
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return BRANCH_COLORS[hash % BRANCH_COLORS.length];
 }
 
 function familyUnitWidth(people) {
-  return people.length * CARD_WIDTH + Math.max(0, people.length - 1) * PARTNER_CONNECTOR_WIDTH;
+  return (
+    people.length * CARD_WIDTH +
+    Math.max(0, people.length - 1) * PARTNER_CONNECTOR_WIDTH
+  );
 }
 
 function buildFamilyLayout(people) {
-  if (!people.length) return { units: [], cards: [], width: 940, height: EMPTY_STAGE_HEIGHT };
-  const sourceOrder = new Map(people.map((person, index) => [person.id, index]));
-  const generations = [...new Set(people.map((person) => person.generation))].sort((first, second) => second - first);
+  if (!people.length)
+    return { units: [], cards: [], width: 940, height: EMPTY_STAGE_HEIGHT };
+  const sourceOrder = new Map(
+    people.map((person, index) => [person.id, index]),
+  );
+  const generations = [
+    ...new Set(people.map((person) => person.generation)),
+  ].sort((first, second) => second - first);
   const highestGeneration = generations[0];
   const lowestGeneration = generations[generations.length - 1];
-  const units = generations.flatMap((generation) => groupPartnerUnits(people.filter((person) => person.generation === generation)).map((members) => ({
-    id: members.map((person) => person.id).sort().join("--"),
-    people: members,
-    generation,
-    width: familyUnitWidth(members),
-    order: Math.min(...members.map((person) => sourceOrder.get(person.id) ?? 0)),
-    children: [],
-    primaryParentId: null,
-    primaryMarriageKey: "",
-    subtreeWidth: 0,
-    x: 0,
-    y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
-  })));
+  const units = generations.flatMap((generation) =>
+    groupPartnerUnits(
+      people.filter((person) => person.generation === generation),
+    ).map((members) => ({
+      id: members
+        .map((person) => person.id)
+        .sort()
+        .join("--"),
+      people: members,
+      generation,
+      width: familyUnitWidth(members),
+      order: Math.min(
+        ...members.map((person) => sourceOrder.get(person.id) ?? 0),
+      ),
+      children: [],
+      primaryParentId: null,
+      primaryMarriageKey: "",
+      subtreeWidth: 0,
+      x: 0,
+      y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
+    })),
+  );
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const unitByPersonId = new Map();
-  units.forEach((unit) => unit.people.forEach((person) => unitByPersonId.set(person.id, unit)));
+  units.forEach((unit) =>
+    unit.people.forEach((person) => unitByPersonId.set(person.id, unit)),
+  );
 
   units.forEach((unit) => {
     const candidates = new Map();
-    unit.people.forEach((person, memberIndex) => person.parents.forEach((parentId) => {
-      const parentUnit = unitByPersonId.get(parentId);
-      if (!parentUnit || parentUnit.id === unit.id || parentUnit.generation >= unit.generation) return;
-      const candidate = candidates.get(parentUnit.id) || { count: 0, firstMemberIndex: memberIndex };
-      candidate.count += 1;
-      candidate.firstMemberIndex = Math.min(candidate.firstMemberIndex, memberIndex);
-      candidates.set(parentUnit.id, candidate);
-    }));
+    unit.people.forEach((person, memberIndex) =>
+      person.parents.forEach((parentId) => {
+        const parentUnit = unitByPersonId.get(parentId);
+        if (
+          !parentUnit ||
+          parentUnit.id === unit.id ||
+          parentUnit.generation >= unit.generation
+        )
+          return;
+        const candidate = candidates.get(parentUnit.id) || {
+          count: 0,
+          firstMemberIndex: memberIndex,
+        };
+        candidate.count += 1;
+        candidate.firstMemberIndex = Math.min(
+          candidate.firstMemberIndex,
+          memberIndex,
+        );
+        candidates.set(parentUnit.id, candidate);
+      }),
+    );
     const [primary] = [...candidates.entries()].sort((first, second) => {
-      if (second[1].count !== first[1].count) return second[1].count - first[1].count;
-      if (first[1].firstMemberIndex !== second[1].firstMemberIndex) return first[1].firstMemberIndex - second[1].firstMemberIndex;
+      if (second[1].count !== first[1].count)
+        return second[1].count - first[1].count;
+      if (first[1].firstMemberIndex !== second[1].firstMemberIndex)
+        return first[1].firstMemberIndex - second[1].firstMemberIndex;
       const firstUnit = unitById.get(first[0]);
       const secondUnit = unitById.get(second[0]);
-      if (secondUnit.generation !== firstUnit.generation) return secondUnit.generation - firstUnit.generation;
+      if (secondUnit.generation !== firstUnit.generation)
+        return secondUnit.generation - firstUnit.generation;
       return firstUnit.order - secondUnit.order;
     });
     if (primary) {
       const parentUnit = unitById.get(primary[0]);
       const parentIds = new Set(parentUnit.people.map((person) => person.id));
       unit.primaryParentId = primary[0];
-      unit.primaryMarriageKey = unit.people.flatMap((person) => person.parents.filter((parentId) => parentIds.has(parentId))).sort().join("--");
+      unit.primaryMarriageKey = unit.people
+        .flatMap((person) =>
+          person.parents.filter((parentId) => parentIds.has(parentId)),
+        )
+        .sort()
+        .join("--");
       parentUnit.children.push(unit);
     }
   });
 
   // ── Undirected adjacency over units: A—B if someone in A is a parent of someone in B. ──
   const neighbours = new Map(units.map((unit) => [unit.id, new Set()]));
-  units.forEach((unit) => unit.people.forEach((person) => person.parents.forEach((parentId) => {
-    const parentUnit = unitByPersonId.get(parentId);
-    if (parentUnit && parentUnit.id !== unit.id) {
-      neighbours.get(unit.id).add(parentUnit.id);
-      neighbours.get(parentUnit.id).add(unit.id);
-    }
-  })));
+  units.forEach((unit) =>
+    unit.people.forEach((person) =>
+      person.parents.forEach((parentId) => {
+        const parentUnit = unitByPersonId.get(parentId);
+        if (parentUnit && parentUnit.id !== unit.id) {
+          neighbours.get(unit.id).add(parentUnit.id);
+          neighbours.get(parentUnit.id).add(unit.id);
+        }
+      }),
+    ),
+  );
 
   // ── Spanning forest: root each connected component at its oldest (lowest-generation) unit, then
   // BFS outward. Every neighbour — descendant OR a married-in spouse's own ancestor branch — becomes
@@ -289,39 +534,86 @@ function buildFamilyLayout(people) {
     while (stack.length) {
       const id = stack.pop();
       component.push(unitById.get(id));
-      neighbours.get(id).forEach((next) => { if (!localSeen.has(next)) { localSeen.add(next); stack.push(next); } });
+      neighbours.get(id).forEach((next) => {
+        if (!localSeen.has(next)) {
+          localSeen.add(next);
+          stack.push(next);
+        }
+      });
     }
-    const root = component.reduce((best, unit) => (unit.generation < best.generation || (unit.generation === best.generation && unit.order < best.order)) ? unit : best, component[0]);
+    const root = component.reduce(
+      (best, unit) =>
+        unit.generation < best.generation ||
+        (unit.generation === best.generation && unit.order < best.order)
+          ? unit
+          : best,
+      component[0],
+    );
     roots.push(root);
     const queue = [root.id];
     visited.add(root.id);
     while (queue.length) {
       const id = queue.shift();
       [...neighbours.get(id)].forEach((next) => {
-        if (!visited.has(next)) { visited.add(next); treeChildren.get(id).push(unitById.get(next)); queue.push(next); }
+        if (!visited.has(next)) {
+          visited.add(next);
+          treeChildren.get(id).push(unitById.get(next));
+          queue.push(next);
+        }
       });
     }
   });
 
   // order spanning-tree children by where they attach along the parent's card row, then source order
   const attachIndex = (parent, child) => {
-    const parentIndex = new Map(parent.people.map((person, index) => [person.id, index]));
+    const parentIndex = new Map(
+      parent.people.map((person, index) => [person.id, index]),
+    );
     const indices = [];
-    child.people.forEach((childPerson) => childPerson.parents.forEach((parentId) => { if (parentIndex.has(parentId)) indices.push(parentIndex.get(parentId)); }));
-    parent.people.forEach((parentPerson, index) => parentPerson.parents.forEach((parentId) => { if (child.people.some((childPerson) => childPerson.id === parentId)) indices.push(index); }));
-    return indices.length ? indices.reduce((sum, value) => sum + value, 0) / indices.length : parent.people.length / 2;
+    child.people.forEach((childPerson) =>
+      childPerson.parents.forEach((parentId) => {
+        if (parentIndex.has(parentId)) indices.push(parentIndex.get(parentId));
+      }),
+    );
+    parent.people.forEach((parentPerson, index) =>
+      parentPerson.parents.forEach((parentId) => {
+        if (child.people.some((childPerson) => childPerson.id === parentId))
+          indices.push(index);
+      }),
+    );
+    return indices.length
+      ? indices.reduce((sum, value) => sum + value, 0) / indices.length
+      : parent.people.length / 2;
   };
-  units.forEach((parent) => treeChildren.get(parent.id).sort((first, second) => attachIndex(parent, first) - attachIndex(parent, second) || first.order - second.order));
+  units.forEach((parent) =>
+    treeChildren
+      .get(parent.id)
+      .sort(
+        (first, second) =>
+          attachIndex(parent, first) - attachIndex(parent, second) ||
+          first.order - second.order,
+      ),
+  );
 
   // ── Contour packing (Reingold–Tilford, keyed by generation-row so branches that share no row stack
   // vertically instead of spreading sideways). layoutSubtree returns x-offsets (root at 0) plus
   // left/right contour maps (generation → extreme edge x). ──
-  const shiftContour = (contour, delta) => { const shifted = new Map(); contour.forEach((value, generation) => shifted.set(generation, value + delta)); return shifted; };
+  const shiftContour = (contour, delta) => {
+    const shifted = new Map();
+    contour.forEach((value, generation) =>
+      shifted.set(generation, value + delta),
+    );
+    return shifted;
+  };
   const layoutSubtree = (unit) => {
     const half = unit.width / 2;
     const kids = treeChildren.get(unit.id);
     if (!kids.length) {
-      return { offsets: new Map([[unit.id, 0]]), left: new Map([[unit.generation, -half]]), right: new Map([[unit.generation, half]]) };
+      return {
+        offsets: new Map([[unit.id, 0]]),
+        left: new Map([[unit.generation, -half]]),
+        right: new Map([[unit.generation, half]]),
+      };
     }
     const offsets = new Map();
     const accLeft = new Map();
@@ -334,15 +626,33 @@ function buildFamilyLayout(people) {
       let shift = 0;
       if (index > 0) {
         let need = -Infinity;
-        sub.left.forEach((leftEdge, generation) => { if (accRight.has(generation)) need = Math.max(need, accRight.get(generation) + CONTOUR_GAP - leftEdge); });
+        sub.left.forEach((leftEdge, generation) => {
+          if (accRight.has(generation))
+            need = Math.max(
+              need,
+              accRight.get(generation) + CONTOUR_GAP - leftEdge,
+            );
+        });
         shift = need === -Infinity ? 0 : Math.max(0, need);
       }
       sub.offsets.forEach((x, id) => offsets.set(id, x + shift));
-      shiftContour(sub.left, shift).forEach((value, generation) => { if (!accLeft.has(generation) || value < accLeft.get(generation)) accLeft.set(generation, value); });
-      shiftContour(sub.right, shift).forEach((value, generation) => { if (!accRight.has(generation) || value > accRight.get(generation)) accRight.set(generation, value); });
+      shiftContour(sub.left, shift).forEach((value, generation) => {
+        if (!accLeft.has(generation) || value < accLeft.get(generation))
+          accLeft.set(generation, value);
+      });
+      shiftContour(sub.right, shift).forEach((value, generation) => {
+        if (!accRight.has(generation) || value > accRight.get(generation))
+          accRight.set(generation, value);
+      });
       kidRootX.push(shift);
-      kidAttachOffset.push(attachIndex(unit, kid) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) + CARD_WIDTH / 2 - unit.width / 2);
-      kidSpan.push(Math.max(...sub.right.values()) - Math.min(...sub.left.values()));
+      kidAttachOffset.push(
+        attachIndex(unit, kid) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) +
+          CARD_WIDTH / 2 -
+          unit.width / 2,
+      );
+      kidSpan.push(
+        Math.max(...sub.right.values()) - Math.min(...sub.left.values()),
+      );
     });
     // Plain couple: centre over its outer children. Multi-marriage unit: align its largest child
     // branch under the exact card it attaches to, so that spouse stays beside their own line while
@@ -350,7 +660,8 @@ function buildFamilyLayout(people) {
     let parentX;
     if (unit.people.length >= 3) {
       let primary = 0;
-      for (let index = 1; index < kids.length; index += 1) if (kidSpan[index] > kidSpan[primary]) primary = index;
+      for (let index = 1; index < kids.length; index += 1)
+        if (kidSpan[index] > kidSpan[primary]) primary = index;
       parentX = kidRootX[primary] - kidAttachOffset[primary];
     } else {
       parentX = (kidRootX[0] + kidRootX[kidRootX.length - 1]) / 2;
@@ -360,8 +671,20 @@ function buildFamilyLayout(people) {
     finalOffsets.set(unit.id, 0);
     const left = shiftContour(accLeft, -parentX);
     const right = shiftContour(accRight, -parentX);
-    left.set(unit.generation, Math.min(left.has(unit.generation) ? left.get(unit.generation) : Infinity, -half));
-    right.set(unit.generation, Math.max(right.has(unit.generation) ? right.get(unit.generation) : -Infinity, half));
+    left.set(
+      unit.generation,
+      Math.min(
+        left.has(unit.generation) ? left.get(unit.generation) : Infinity,
+        -half,
+      ),
+    );
+    right.set(
+      unit.generation,
+      Math.max(
+        right.has(unit.generation) ? right.get(unit.generation) : -Infinity,
+        half,
+      ),
+    );
     return { offsets: finalOffsets, left, right };
   };
 
@@ -372,15 +695,32 @@ function buildFamilyLayout(people) {
     let base = STAGE_PADDING - Math.min(...sub.left.values());
     if (index > 0) {
       let need = -Infinity;
-      sub.left.forEach((leftEdge, generation) => { if (cursorRight.has(generation)) need = Math.max(need, cursorRight.get(generation) + ROOT_FAMILY_GAP - (base + leftEdge)); });
+      sub.left.forEach((leftEdge, generation) => {
+        if (cursorRight.has(generation))
+          need = Math.max(
+            need,
+            cursorRight.get(generation) + ROOT_FAMILY_GAP - (base + leftEdge),
+          );
+      });
       if (need !== -Infinity && need > 0) base += need;
     }
-    sub.offsets.forEach((x, id) => { unitById.get(id).x = base + x; });
-    sub.right.forEach((value, generation) => { const absolute = base + value; if (!cursorRight.has(generation) || absolute > cursorRight.get(generation)) cursorRight.set(generation, absolute); });
+    sub.offsets.forEach((x, id) => {
+      unitById.get(id).x = base + x;
+    });
+    sub.right.forEach((value, generation) => {
+      const absolute = base + value;
+      if (
+        !cursorRight.has(generation) ||
+        absolute > cursorRight.get(generation)
+      )
+        cursorRight.set(generation, absolute);
+    });
   });
 
   // convert centre → left edge for the renderer
-  units.forEach((unit) => { unit.x -= unit.width / 2; });
+  units.forEach((unit) => {
+    unit.x -= unit.width / 2;
+  });
 
   // ── Spread the spouse chain: give each spouse card a variable gap so it sits over the branches
   // that attach to that person (their own children, and a married-in spouse's own parents), instead
@@ -395,19 +735,35 @@ function buildFamilyLayout(people) {
     const targets = unit.people.map((person) => {
       const centres = [];
       kids.forEach((child) => {
-        const attaches = child.people.some((childPerson) => childPerson.parents.includes(person.id)) || person.parents.some((parentId) => child.people.some((childPerson) => childPerson.id === parentId));
+        const attaches =
+          child.people.some((childPerson) =>
+            childPerson.parents.includes(person.id),
+          ) ||
+          person.parents.some((parentId) =>
+            child.people.some((childPerson) => childPerson.id === parentId),
+          );
         if (attaches) centres.push(child.x + child.width / 2);
       });
-      return centres.length ? centres.reduce((sum, value) => sum + value, 0) / centres.length : null;
+      return centres.length
+        ? centres.reduce((sum, value) => sum + value, 0) / centres.length
+        : null;
     });
     if (targets.every((target) => target === null)) return;
-    const left = unit.people.map((_person, index) => targets[index] != null ? targets[index] - CARD_WIDTH / 2 : unit.x + index * STEP);
-    for (let index = 1; index < count; index += 1) left[index] = Math.max(left[index], left[index - 1] + STEP);
-    for (let index = count - 2; index >= 0; index -= 1) if (targets[index] == null) left[index] = Math.min(left[index], left[index + 1] - STEP);
+    const left = unit.people.map((_person, index) =>
+      targets[index] != null
+        ? targets[index] - CARD_WIDTH / 2
+        : unit.x + index * STEP,
+    );
+    for (let index = 1; index < count; index += 1)
+      left[index] = Math.max(left[index], left[index - 1] + STEP);
+    for (let index = count - 2; index >= 0; index -= 1)
+      if (targets[index] == null)
+        left[index] = Math.min(left[index], left[index + 1] - STEP);
     const minLeft = Math.min(...left);
     unit.x = minLeft;
     unit.width = Math.max(...left) + CARD_WIDTH - minLeft;
-    for (let index = 1; index < count; index += 1) unit.gaps[index - 1] = left[index] - (left[index - 1] + CARD_WIDTH);
+    for (let index = 1; index < count; index += 1)
+      unit.gaps[index - 1] = left[index] - (left[index - 1] + CARD_WIDTH);
   });
 
   // ── Resolve residual same-generation overlaps (fires only where a unit and one of its spanning
@@ -416,22 +772,31 @@ function buildFamilyLayout(people) {
   const computeSubtree = (unit) => {
     if (subtreeOf.has(unit.id)) return subtreeOf.get(unit.id);
     const set = new Set([unit.id]);
-    treeChildren.get(unit.id).forEach((child) => computeSubtree(child).forEach((id) => set.add(id)));
+    treeChildren
+      .get(unit.id)
+      .forEach((child) => computeSubtree(child).forEach((id) => set.add(id)));
     subtreeOf.set(unit.id, set);
     return set;
   };
   units.forEach(computeSubtree);
-  const shiftSubtree = (unit, delta) => subtreeOf.get(unit.id).forEach((id) => { unitById.get(id).x += delta; });
+  const shiftSubtree = (unit, delta) =>
+    subtreeOf.get(unit.id).forEach((id) => {
+      unitById.get(id).x += delta;
+    });
   for (let iteration = 0; iteration < 12; iteration += 1) {
     let moved = false;
     const byGeneration = new Map();
-    units.forEach((unit) => { if (!byGeneration.has(unit.generation)) byGeneration.set(unit.generation, []); byGeneration.get(unit.generation).push(unit); });
+    units.forEach((unit) => {
+      if (!byGeneration.has(unit.generation))
+        byGeneration.set(unit.generation, []);
+      byGeneration.get(unit.generation).push(unit);
+    });
     for (const row of byGeneration.values()) {
       row.sort((first, second) => first.x - second.x);
       for (let index = 0; index < row.length - 1; index += 1) {
         const left = row[index];
         const right = row[index + 1];
-        const gap = (left.x + left.width) + CONTOUR_GAP - right.x;
+        const gap = left.x + left.width + CONTOUR_GAP - right.x;
         if (gap > 0.5) {
           if (subtreeOf.get(right.id).has(left.id)) shiftSubtree(left, -gap);
           else shiftSubtree(right, gap);
@@ -444,20 +809,27 @@ function buildFamilyLayout(people) {
 
   // normalise to stage padding
   let minX = Infinity;
-  units.forEach((unit) => { if (unit.x < minX) minX = unit.x; });
+  units.forEach((unit) => {
+    if (unit.x < minX) minX = unit.x;
+  });
   if (Number.isFinite(minX)) {
     const shift = STAGE_PADDING - minX;
-    units.forEach((unit) => { unit.x += shift; });
+    units.forEach((unit) => {
+      unit.x += shift;
+    });
   }
   // Cards are laid out as a family only for the initial automatic arrangement. Every person gets
   // their own final coordinates so partners can later be moved independently.
   const cards = [];
   units.forEach((unit) => {
     const gaps = unit.gaps || [];
-    const cardLeft = (index) => index * CARD_WIDTH + gaps.slice(0, index).reduce((sum, value) => sum + value, 0);
+    const cardLeft = (index) =>
+      index * CARD_WIDTH +
+      gaps.slice(0, index).reduce((sum, value) => sum + value, 0);
     const manualGroups = new Map();
     unit.people.forEach((person) => {
-      if (!Number.isFinite(person.manualX) || !Number.isFinite(person.manualY)) return;
+      if (!Number.isFinite(person.manualX) || !Number.isFinite(person.manualY))
+        return;
       const key = `${person.manualX}:${person.manualY}`;
       if (!manualGroups.has(key)) manualGroups.set(key, []);
       manualGroups.get(key).push(person.id);
@@ -471,26 +843,37 @@ function buildFamilyLayout(people) {
       const source = unit.people.find((person) => person.id === ids[0]);
       ids.forEach((id) => {
         const index = unit.people.findIndex((person) => person.id === id);
-        legacyPositions.set(id, { x: source.manualX + cardLeft(index), y: source.manualY });
+        legacyPositions.set(id, {
+          x: source.manualX + cardLeft(index),
+          y: source.manualY,
+        });
       });
     });
     unit.people.forEach((person, index) => {
       const legacy = legacyPositions.get(person.id);
-      const hasManualPosition = Number.isFinite(person.manualX) && Number.isFinite(person.manualY);
+      const hasManualPosition =
+        Number.isFinite(person.manualX) && Number.isFinite(person.manualY);
       cards.push({
         person,
-        x: legacy?.x ?? (hasManualPosition ? person.manualX : unit.x + cardLeft(index)),
+        x:
+          legacy?.x ??
+          (hasManualPosition ? person.manualX : unit.x + cardLeft(index)),
         y: legacy?.y ?? (hasManualPosition ? person.manualY : unit.y),
       });
     });
   });
 
-  let autoHeight = STAGE_TOP + (highestGeneration - lowestGeneration) * GENERATION_GAP + CARD_HEIGHT + STAGE_BOTTOM;
+  let autoHeight =
+    STAGE_TOP +
+    (highestGeneration - lowestGeneration) * GENERATION_GAP +
+    CARD_HEIGHT +
+    STAGE_BOTTOM;
   let width = 0;
   let heightFromUnits = 0;
   cards.forEach((card) => {
     if (card.x + CARD_WIDTH > width) width = card.x + CARD_WIDTH;
-    if (card.y + CARD_HEIGHT > heightFromUnits) heightFromUnits = card.y + CARD_HEIGHT;
+    if (card.y + CARD_HEIGHT > heightFromUnits)
+      heightFromUnits = card.y + CARD_HEIGHT;
   });
   return {
     units,
@@ -501,31 +884,60 @@ function buildFamilyLayout(people) {
 }
 
 function generationLabel(generation) {
-  return generationMeta.find((item) => item.id === generation)?.label || `Поколение ${generation + 1}`;
+  return (
+    generationMeta.find((item) => item.id === generation)?.label ||
+    `Поколение ${generation + 1}`
+  );
 }
 
-function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canManage, scale, canvasOffsetX, canvasOffsetY, onDragEnd }) {
+function PositionedPerson({
+  card,
+  selectedId,
+  focusIds,
+  onSelect,
+  register,
+  canManage,
+  scale,
+  canvasOffsetX,
+  canvasOffsetY,
+  onDragEnd,
+}) {
   const [drag, setDrag] = useState(null);
   const draggedRef = useRef(false);
   const redrawFrame = useRef(null);
   const clickResetTimer = useRef(null);
-  useEffect(() => () => {
-    cancelAnimationFrame(redrawFrame.current);
-    clearTimeout(clickResetTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(redrawFrame.current);
+      clearTimeout(clickResetTimer.current);
+    },
+    [],
+  );
   const redrawConnections = () => {
     cancelAnimationFrame(redrawFrame.current);
-    redrawFrame.current = requestAnimationFrame(() => window.dispatchEvent(new Event("family-layout-change")));
+    redrawFrame.current = requestAnimationFrame(() =>
+      window.dispatchEvent(new Event("family-layout-change")),
+    );
   };
   const beginDrag = (event) => {
-    if (!canManage || (event.pointerType === "mouse" && event.button !== 0)) return;
+    if (!canManage || (event.pointerType === "mouse" && event.button !== 0))
+      return;
     event.preventDefault();
-    const start = { x: event.clientX, y: event.clientY, moved: false, pointerId: event.pointerId };
+    const start = {
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+      pointerId: event.pointerId,
+    };
     const onMove = (moveEvent) => {
       if (moveEvent.pointerId !== start.pointerId) return;
       const dx = (moveEvent.clientX - start.x) / (scale || 1);
       const dy = (moveEvent.clientY - start.y) / (scale || 1);
-      if (!start.moved && Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 4) return;
+      if (
+        !start.moved &&
+        Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 4
+      )
+        return;
       start.moved = true;
       draggedRef.current = true;
       setDrag({ dx, dy });
@@ -540,7 +952,9 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
         const dx = (upEvent.clientX - start.x) / (scale || 1);
         const dy = (upEvent.clientY - start.y) / (scale || 1);
         onDragEnd(card.person.id, card.x + dx, card.y + dy);
-        clickResetTimer.current = setTimeout(() => { draggedRef.current = false; }, 0);
+        clickResetTimer.current = setTimeout(() => {
+          draggedRef.current = false;
+        }, 0);
       }
       setDrag(null);
       redrawConnections();
@@ -550,7 +964,11 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
     document.addEventListener("pointercancel", onUp);
   };
   const suppressClickAfterDrag = (event) => {
-    if (draggedRef.current) { event.stopPropagation(); event.preventDefault(); draggedRef.current = false; }
+    if (draggedRef.current) {
+      event.stopPropagation();
+      event.preventDefault();
+      draggedRef.current = false;
+    }
   };
   const person = card.person;
   const left = card.x + canvasOffsetX + (drag?.dx || 0);
@@ -563,50 +981,154 @@ function PositionedPerson({ card, selectedId, focusIds, onSelect, register, canM
       onPointerDown={beginDrag}
       onClickCapture={suppressClickAfterDrag}
     >
-      <PersonCard person={person} selected={person.id === selectedId} focus={focusIds ? (focusIds.has(person.id) ? (person.id === selectedId ? "" : "on") : "dim") : ""} onSelect={onSelect} register={register}/>
+      <PersonCard
+        person={person}
+        selected={person.id === selectedId}
+        focus={
+          focusIds
+            ? focusIds.has(person.id)
+              ? person.id === selectedId
+                ? ""
+                : "on"
+              : "dim"
+            : ""
+        }
+        onSelect={onSelect}
+        register={register}
+      />
     </div>
   );
 }
 
-function DetailPanel({ person, people, canEdit, expanded, onToggleExpand, onClose, onEdit, onDelete, onSelect }) {
+function DetailPanel({
+  person,
+  people,
+  canEdit,
+  expanded,
+  onToggleExpand,
+  onClose,
+  onEdit,
+  onDelete,
+  onSelect,
+  onFocus,
+}) {
   if (!person) return null;
-  const related = people.filter((item) => person.parents.includes(item.id) || item.parents.includes(person.id) || person.partnerIds.includes(item.id) || item.partnerIds.includes(person.id));
+  const related = directRelatives(people, person);
   return (
-    <aside className={`detail-panel ${expanded ? "is-expanded" : ""}`} aria-label={`Сведения: ${person.name}`}>
-      <button className="sheet-handle" onClick={onToggleExpand} aria-label={expanded ? "Свернуть" : "Показать подробнее"}><i/></button>
-      <button className="icon-button detail-close" onClick={onClose} aria-label="Закрыть карточку"><Icon name="close" /></button>
+    <aside
+      className={`detail-panel ${expanded ? "is-expanded" : ""}`}
+      aria-label={`Сведения: ${person.name}`}
+    >
+      <button
+        className="sheet-handle"
+        onClick={onToggleExpand}
+        aria-label={expanded ? "Свернуть" : "Показать подробнее"}
+      >
+        <i />
+      </button>
+      <button
+        className="icon-button detail-close"
+        onClick={onClose}
+        aria-label="Закрыть карточку"
+      >
+        <Icon name="close" />
+      </button>
       <div className="detail-heading" onClick={onToggleExpand}>
-        <Portrait person={person} className="detail-avatar"/>
-        <div><h2>{person.name}</h2><p>{formatLifespan(person)}</p></div>
+        <Portrait person={person} className="detail-avatar" />
+        <div>
+          <h2>{person.name}</h2>
+          <p>{formatLifespan(person)}</p>
+        </div>
       </div>
       <button className="sheet-more" onClick={onToggleExpand}>
         {expanded ? "Свернуть" : "Место рождения, заметки и связи"}
-        <Icon name="chevron" size={15}/>
+        <Icon name="chevron" size={15} />
       </button>
       <section className="detail-section">
-        <div className="section-title"><h3>О человеке</h3>{canEdit && <button className="bare-icon" onClick={onEdit} aria-label="Редактировать"><Icon name="edit" size={18}/></button>}</div>
+        <div className="section-title">
+          <h3>О человеке</h3>
+          {canEdit && (
+            <button
+              className="bare-icon"
+              onClick={onEdit}
+              aria-label="Редактировать"
+            >
+              <Icon name="edit" size={18} />
+            </button>
+          )}
+        </div>
         <dl>
-          <div><dt>Девичья фамилия</dt><dd>{person.maidenName || "Не указана"}</dd></div>
-          <div><dt>Дата рождения</dt><dd>{person.birth || "Не указана"}</dd></div>
-          <div><dt>Место рождения</dt><dd>{person.birthplace || "Не указано"}</dd></div>
-          <div><dt>Дата смерти</dt><dd>{person.death || "Не указана"}</dd></div>
-          <div><dt>Место смерти</dt><dd>{person.deathplace || "Не указано"}</dd></div>
-          <div><dt>Примечание</dt><dd>{person.note || "Пока нет заметок"}</dd></div>
+          <div>
+            <dt>Девичья фамилия</dt>
+            <dd>{person.maidenName || "Не указана"}</dd>
+          </div>
+          <div>
+            <dt>Дата рождения</dt>
+            <dd>{person.birth || "Не указана"}</dd>
+          </div>
+          <div>
+            <dt>Место рождения</dt>
+            <dd>{person.birthplace || "Не указано"}</dd>
+          </div>
+          <div>
+            <dt>Дата смерти</dt>
+            <dd>{person.death || "Не указана"}</dd>
+          </div>
+          <div>
+            <dt>Место смерти</dt>
+            <dd>{person.deathplace || "Не указано"}</dd>
+          </div>
+          <div>
+            <dt>Примечание</dt>
+            <dd>{person.note || "Пока нет заметок"}</dd>
+          </div>
         </dl>
       </section>
       <section className="detail-section relations">
-        <div className="section-title"><h3>Родственные связи</h3></div>
-        {related.length ? related.map((relative) => (
-          <button key={relative.id} className="relation-row" onClick={() => onSelect(relative.id)}>
-            <span><em>{relationshipLabel(person, relative)}</em><strong>{relative.name}</strong><small>{formatLifespan(relative)}</small></span><Icon name="chevron" size={17}/>
-          </button>
-        )) : <p className="empty-copy">Связи ещё не добавлены.</p>}
+        <div className="section-title">
+          <h3>Родственные связи</h3>
+        </div>
+        {related.length ? (
+          related.map((relative) => (
+            <button
+              key={relative.id}
+              className="relation-row"
+              onClick={() => onSelect(relative.id)}
+            >
+              <Portrait person={relative} className="relation-avatar" />
+              <span>
+                <em>{relationshipLabel(person, relative)}</em>
+                <strong>{relative.name}</strong>
+                <small>{formatLifespan(relative)}</small>
+              </span>
+              <Icon name="chevron" size={17} />
+            </button>
+          ))
+        ) : (
+          <p className="empty-copy">Связи ещё не добавлены.</p>
+        )}
       </section>
+      <button className="button ghost focus-branch" onClick={onFocus}>
+        <Icon name="tree" size={16} />
+        Показать семейную ветвь
+      </button>
       <div className="detail-actions">
-        {canEdit && <button className="button secondary" onClick={onEdit}><Icon name="edit" size={18}/>Редактировать</button>}
-        <button className="button ghost" onClick={onClose}>Закрыть</button>
+        {canEdit && (
+          <button className="button secondary" onClick={onEdit}>
+            <Icon name="edit" size={18} />
+            Редактировать
+          </button>
+        )}
+        <button className="button ghost" onClick={onClose}>
+          Закрыть
+        </button>
       </div>
-      {canEdit && <button className="delete-action" onClick={onDelete}><Icon name="trash" size={17}/>Удалить человека</button>}
+      {canEdit && (
+        <button className="delete-action" onClick={onDelete}>
+          <Icon name="trash" size={17} />
+          Удалить человека
+        </button>
+      )}
     </aside>
   );
 }
@@ -617,14 +1139,36 @@ function PersonEditor({ person, people, onSave, onClose }) {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [form, setForm] = useState({
-    name: "", birth: "", death: "", relation: "", generation: 0,
-    parents: [], partnerIds: [], currentPartnerId: "", formerPartnerIds: [], birthplace: "", deathplace: "", maidenName: "", note: "",
-    photo: "", photoX: 50, photoY: 50, photoScale: 1,
+    name: "",
+    birth: "",
+    death: "",
+    relation: "",
+    generation: 0,
+    parents: [],
+    partnerIds: [],
+    currentPartnerId: "",
+    formerPartnerIds: [],
+    birthplace: "",
+    deathplace: "",
+    maidenName: "",
+    note: "",
+    photo: "",
+    photoX: 50,
+    photoY: 50,
+    photoScale: 1,
     ...(person ? normalizePerson(person) : {}),
   });
-  const highestGeneration = Math.max(3, form.generation, ...people.map((item) => item.generation));
-  const generationOptions = Array.from({ length: highestGeneration + 2 }, (_, generation) => generation).reverse();
-  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const highestGeneration = Math.max(
+    3,
+    form.generation,
+    ...people.map((item) => item.generation),
+  );
+  const generationOptions = Array.from(
+    { length: highestGeneration + 2 },
+    (_, generation) => generation,
+  ).reverse();
+  const update = (key, value) =>
+    setForm((current) => ({ ...current, [key]: value }));
   const choosePhoto = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -632,7 +1176,13 @@ function PersonEditor({ person, people, onSave, onClose }) {
     setPhotoError("");
     try {
       const photo = await optimizePhoto(file);
-      setForm((current) => ({ ...current, photo, photoX: 50, photoY: 50, photoScale: 1 }));
+      setForm((current) => ({
+        ...current,
+        photo,
+        photoX: 50,
+        photoY: 50,
+        photoScale: 1,
+      }));
     } catch (error) {
       setPhotoError(error.message);
     } finally {
@@ -644,95 +1194,375 @@ function PersonEditor({ person, people, onSave, onClose }) {
     setForm((current) => {
       const parents = [...current.parents];
       parents[index] = parentId;
-      const uniqueParents = parents.filter((id, itemIndex, all) => id && all.indexOf(id) === itemIndex);
-      const parentGenerations = uniqueParents.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
-      const generation = parentGenerations.length ? Math.max(...parentGenerations) + 1 : current.generation;
-      return { ...current, parents: uniqueParents, generation, manualGeneration: false };
+      const uniqueParents = parents.filter(
+        (id, itemIndex, all) => id && all.indexOf(id) === itemIndex,
+      );
+      const parentGenerations = uniqueParents
+        .map((id) => people.find((item) => item.id === id)?.generation)
+        .filter(Number.isFinite);
+      const generation = parentGenerations.length
+        ? Math.max(...parentGenerations) + 1
+        : current.generation;
+      return {
+        ...current,
+        parents: uniqueParents,
+        generation,
+        manualGeneration: false,
+      };
     });
   };
   const togglePartner = (partnerId, checked) => {
     setForm((current) => {
-      const partnerIds = checked ? [...new Set([...current.partnerIds, partnerId])] : current.partnerIds.filter((id) => id !== partnerId);
-      const generations = partnerIds.map((id) => people.find((item) => item.id === id)?.generation).filter(Number.isFinite);
-      const currentPartnerId = checked ? current.currentPartnerId : (current.currentPartnerId === partnerId ? "" : current.currentPartnerId);
-      const formerPartnerIds = checked ? current.formerPartnerIds : current.formerPartnerIds.filter((id) => id !== partnerId);
-      return { ...current, partnerIds, currentPartnerId, formerPartnerIds, generation: generations.length ? Math.max(...generations) : current.generation };
+      const partnerIds = checked
+        ? [...new Set([...current.partnerIds, partnerId])]
+        : current.partnerIds.filter((id) => id !== partnerId);
+      const generations = partnerIds
+        .map((id) => people.find((item) => item.id === id)?.generation)
+        .filter(Number.isFinite);
+      const currentPartnerId = checked
+        ? current.currentPartnerId
+        : current.currentPartnerId === partnerId
+          ? ""
+          : current.currentPartnerId;
+      const formerPartnerIds = checked
+        ? current.formerPartnerIds
+        : current.formerPartnerIds.filter((id) => id !== partnerId);
+      return {
+        ...current,
+        partnerIds,
+        currentPartnerId,
+        formerPartnerIds,
+        generation: generations.length
+          ? Math.max(...generations)
+          : current.generation,
+      };
     });
   };
-  const setCurrentPartner = (partnerId, isCurrent) => setForm((current) => ({ ...current, currentPartnerId: isCurrent ? "" : partnerId, formerPartnerIds: current.formerPartnerIds.filter((id) => id !== partnerId) }));
-  const setFormerPartner = (partnerId, isFormer) => setForm((current) => ({
-    ...current,
-    currentPartnerId: current.currentPartnerId === partnerId ? "" : current.currentPartnerId,
-    formerPartnerIds: isFormer ? current.formerPartnerIds.filter((id) => id !== partnerId) : [...new Set([...current.formerPartnerIds, partnerId])],
-  }));
+  const setCurrentPartner = (partnerId, isCurrent) =>
+    setForm((current) => ({
+      ...current,
+      currentPartnerId: isCurrent ? "" : partnerId,
+      formerPartnerIds: current.formerPartnerIds.filter(
+        (id) => id !== partnerId,
+      ),
+    }));
+  const setFormerPartner = (partnerId, isFormer) =>
+    setForm((current) => ({
+      ...current,
+      currentPartnerId:
+        current.currentPartnerId === partnerId ? "" : current.currentPartnerId,
+      formerPartnerIds: isFormer
+        ? current.formerPartnerIds.filter((id) => id !== partnerId)
+        : [...new Set([...current.formerPartnerIds, partnerId])],
+    }));
   const submit = (event) => {
     event.preventDefault();
     onSave(form);
   };
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <form className="editor" onSubmit={submit}>
-        <div className="editor-header"><div><h2>{isNew ? "Добавить человека" : "Редактировать запись"}</h2><p>Заполните только то, что уже известно.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><Icon name="close" /></button></div>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <form className="editor" role="dialog" aria-modal="true" aria-label={isNew ? "Добавить человека" : "Редактировать запись"} onSubmit={submit}>
+        <div className="editor-header">
+          <div>
+            <h2>{isNew ? "Добавить человека" : "Редактировать запись"}</h2>
+            <p>Заполните только то, что уже известно.</p>
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
         <div className="photo-editor">
-          <Portrait person={{ ...form, name: form.name || "Фото" }} className="editor-photo-preview"/>
+          <Portrait
+            person={{ ...form, name: form.name || "Фото" }}
+            className="editor-photo-preview"
+          />
           <div className="photo-editor-body">
             <strong>Фотография</strong>
             <p>Загрузите снимок, затем подгоните лицо внутри овала.</p>
-            <input ref={photoInputRef} className="visually-hidden" type="file" accept="image/*" onChange={choosePhoto}/>
+            <input
+              ref={photoInputRef}
+              className="visually-hidden"
+              type="file"
+              accept="image/*"
+              onChange={choosePhoto}
+            />
             <div className="photo-buttons">
-              <button type="button" className="button ghost compact" onClick={() => photoInputRef.current?.click()} disabled={photoBusy}>{photoBusy ? "Обрабатываем…" : form.photo ? "Заменить фото" : "Добавить фото"}</button>
-              {form.photo && <button type="button" className="bare-text-button" onClick={() => setForm((current) => ({ ...current, photo: "", photoX: 50, photoY: 50, photoScale: 1 }))}>Убрать</button>}
+              <button
+                type="button"
+                className="button ghost compact"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoBusy}
+              >
+                {photoBusy
+                  ? "Обрабатываем…"
+                  : form.photo
+                    ? "Заменить фото"
+                    : "Добавить фото"}
+              </button>
+              {form.photo && (
+                <button
+                  type="button"
+                  className="bare-text-button"
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      photo: "",
+                      photoX: 50,
+                      photoY: 50,
+                      photoScale: 1,
+                    }))
+                  }
+                >
+                  Убрать
+                </button>
+              )}
             </div>
-            {photoError && <span className="field-error" role="alert">{photoError}</span>}
-            {form.photo && <div className="photo-controls">
-              <label>По горизонтали<input aria-label="Положение фото по горизонтали" type="range" min="0" max="100" value={form.photoX} onChange={(e) => update("photoX", Number(e.target.value))}/></label>
-              <label>По вертикали<input aria-label="Положение фото по вертикали" type="range" min="0" max="100" value={form.photoY} onChange={(e) => update("photoY", Number(e.target.value))}/></label>
-              <label>Масштаб<input aria-label="Масштаб фото" type="range" min="1" max="2" step="0.05" value={form.photoScale} onChange={(e) => update("photoScale", Number(e.target.value))}/></label>
-            </div>}
+            {photoError && (
+              <span className="field-error" role="alert">
+                {photoError}
+              </span>
+            )}
+            {form.photo && (
+              <div className="photo-controls">
+                <label>
+                  По горизонтали
+                  <input
+                    aria-label="Положение фото по горизонтали"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={form.photoX}
+                    onChange={(e) => update("photoX", Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  По вертикали
+                  <input
+                    aria-label="Положение фото по вертикали"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={form.photoY}
+                    onChange={(e) => update("photoY", Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Масштаб
+                  <input
+                    aria-label="Масштаб фото"
+                    type="range"
+                    min="1"
+                    max="2"
+                    step="0.05"
+                    value={form.photoScale}
+                    onChange={(e) =>
+                      update("photoScale", Number(e.target.value))
+                    }
+                  />
+                </label>
+              </div>
+            )}
           </div>
         </div>
         <div className="form-grid">
-          <label className="wide">Имя и фамилия<input name="name" value={form.name} onChange={(e) => update("name", e.target.value)} required autoFocus /></label>
-          <label>Дата рождения<input name="birth" value={form.birth} onChange={(e) => update("birth", e.target.value)} placeholder="ДД.ММ.ГГГГ" /></label>
-          <label>Дата смерти<input name="death" value={form.death} onChange={(e) => update("death", e.target.value)} placeholder="ДД.ММ.ГГГГ" /></label>
-          <label>Поколение<select value={form.generation} onChange={(e) => setForm((current) => ({ ...current, generation: Number(e.target.value), manualGeneration: true }))}>{generationOptions.map((generation) => <option value={generation} key={generation}>{generationLabel(generation)}</option>)}</select></label>
-          <label>Кем приходится<input value={form.relation} onChange={(e) => update("relation", e.target.value)} placeholder="например, прабабушка" /></label>
-          <label>Первый родитель<select name="parentId1" value={form.parents?.[0] || ""} onChange={(e) => chooseParent(0, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Второй родитель<select name="parentId2" value={form.parents?.[1] || ""} onChange={(e) => chooseParent(1, e.target.value)}><option value="">Не выбран</option>{people.filter((item) => item.id !== person?.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="wide">
+            Имя и фамилия
+            <input
+              name="name"
+              value={form.name}
+              onChange={(e) => update("name", e.target.value)}
+              required
+              autoFocus
+            />
+          </label>
+          <label>
+            Дата рождения
+            <input
+              name="birth"
+              value={form.birth}
+              onChange={(e) => update("birth", e.target.value)}
+              placeholder="ДД.ММ.ГГГГ"
+            />
+          </label>
+          <label>
+            Дата смерти
+            <input
+              name="death"
+              value={form.death}
+              onChange={(e) => update("death", e.target.value)}
+              placeholder="ДД.ММ.ГГГГ"
+            />
+          </label>
+          <label>
+            Поколение
+            <select
+              value={form.generation}
+              onChange={(e) =>
+                setForm((current) => ({
+                  ...current,
+                  generation: Number(e.target.value),
+                  manualGeneration: true,
+                }))
+              }
+            >
+              {generationOptions.map((generation) => (
+                <option value={generation} key={generation}>
+                  {generationLabel(generation)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Кем приходится
+            <input
+              value={form.relation}
+              onChange={(e) => update("relation", e.target.value)}
+              placeholder="например, прабабушка"
+            />
+          </label>
+          <label>
+            Первый родитель
+            <select
+              name="parentId1"
+              value={form.parents?.[0] || ""}
+              onChange={(e) => chooseParent(0, e.target.value)}
+            >
+              <option value="">Не выбран</option>
+              {people
+                .filter((item) => item.id !== person?.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Второй родитель
+            <select
+              name="parentId2"
+              value={form.parents?.[1] || ""}
+              onChange={(e) => chooseParent(1, e.target.value)}
+            >
+              <option value="">Не выбран</option>
+              {people
+                .filter((item) => item.id !== person?.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+            </select>
+          </label>
           <fieldset className="wide spouse-field">
             <legend>Супруги</legend>
             <div className="spouse-options">
-              {people.filter((item) => item.id !== person?.id).map((item) => {
-                const checked = form.partnerIds.includes(item.id);
-                const isCurrent = form.currentPartnerId === item.id || item.currentPartnerId === form.id;
-                const isFormer = form.formerPartnerIds.includes(item.id) || item.formerPartnerIds.includes(form.id);
-                return (
-                  <span className="spouse-option" key={item.id}>
-                    <label>
-                      <input type="checkbox" checked={checked} onChange={(e) => togglePartner(item.id, e.target.checked)}/>
-                      <span>{item.name}</span>
-                    </label>
-                    {checked && <span className="marriage-status-controls">
-                      <button type="button" className={`current-marriage-toggle ${isCurrent ? "is-current" : ""}`} onClick={() => setCurrentPartner(item.id, isCurrent)}>
-                        {isCurrent ? "Текущий брак" : "Отметить текущим"}
-                      </button>
-                      <button type="button" className={`former-marriage-toggle ${isFormer ? "is-former" : ""}`} onClick={() => setFormerPartner(item.id, isFormer)}>
-                        {isFormer ? "Бывший брак" : "Отметить бывшим"}
-                      </button>
-                    </span>}
-                  </span>
-                );
-              })}
-              {people.filter((item) => item.id !== person?.id).length === 0 ? <span className="empty-spouse-copy">Сначала добавьте второго человека</span> : null}
+              {people
+                .filter((item) => item.id !== person?.id)
+                .map((item) => {
+                  const checked = form.partnerIds.includes(item.id);
+                  const isCurrent =
+                    form.currentPartnerId === item.id ||
+                    item.currentPartnerId === form.id;
+                  const isFormer =
+                    form.formerPartnerIds.includes(item.id) ||
+                    item.formerPartnerIds.includes(form.id);
+                  return (
+                    <span className="spouse-option" key={item.id}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            togglePartner(item.id, e.target.checked)
+                          }
+                        />
+                        <span>{item.name}</span>
+                      </label>
+                      {checked && (
+                        <span className="marriage-status-controls">
+                          <button
+                            type="button"
+                            className={`current-marriage-toggle ${isCurrent ? "is-current" : ""}`}
+                            onClick={() =>
+                              setCurrentPartner(item.id, isCurrent)
+                            }
+                          >
+                            {isCurrent ? "Текущий брак" : "Отметить текущим"}
+                          </button>
+                          <button
+                            type="button"
+                            className={`former-marriage-toggle ${isFormer ? "is-former" : ""}`}
+                            onClick={() => setFormerPartner(item.id, isFormer)}
+                          >
+                            {isFormer ? "Бывший брак" : "Отметить бывшим"}
+                          </button>
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              {people.filter((item) => item.id !== person?.id).length === 0 ? (
+                <span className="empty-spouse-copy">
+                  Сначала добавьте второго человека
+                </span>
+              ) : null}
             </div>
-            {form.partnerIds.length > 0 && <p className="spouse-hint">Отметьте текущий или бывший брак. Рамка показывается только у текущей пары; бывшие супруги остаются рядом без фона.</p>}
+            {form.partnerIds.length > 0 && (
+              <p className="spouse-hint">
+                Отметьте текущий или бывший брак. Рамка показывается только у
+                текущей пары; бывшие супруги остаются рядом без фона.
+              </p>
+            )}
           </fieldset>
-          <label className="wide">Девичья фамилия<input value={form.maidenName} onChange={(e) => update("maidenName", e.target.value)} placeholder="Фамилия до брака" /></label>
-          <label className="wide">Место рождения<input value={form.birthplace} onChange={(e) => update("birthplace", e.target.value)} /></label>
-          <label className="wide">Место смерти<input value={form.deathplace} onChange={(e) => update("deathplace", e.target.value)} /></label>
-          <label className="wide">Заметка<textarea rows="3" value={form.note} onChange={(e) => update("note", e.target.value)} /></label>
+          <label className="wide">
+            Девичья фамилия
+            <input
+              value={form.maidenName}
+              onChange={(e) => update("maidenName", e.target.value)}
+              placeholder="Фамилия до брака"
+            />
+          </label>
+          <label className="wide">
+            Место рождения
+            <input
+              value={form.birthplace}
+              onChange={(e) => update("birthplace", e.target.value)}
+            />
+          </label>
+          <label className="wide">
+            Место смерти
+            <input
+              value={form.deathplace}
+              onChange={(e) => update("deathplace", e.target.value)}
+            />
+          </label>
+          <label className="wide">
+            Заметка
+            <textarea
+              rows="3"
+              value={form.note}
+              onChange={(e) => update("note", e.target.value)}
+            />
+          </label>
         </div>
-        <div className="editor-actions"><button type="button" className="button ghost" onClick={onClose}>Отмена</button><button className="button primary" type="submit">Сохранить</button></div>
+        <div className="editor-actions">
+          <button type="button" className="button ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button className="button primary" type="submit">
+            Сохранить
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -740,14 +1570,32 @@ function PersonEditor({ person, people, onSave, onClose }) {
 
 function ConfirmDelete({ person, onConfirm, onClose }) {
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
-        <span className="confirm-icon"><Icon name="trash" size={24}/></span>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <section
+        className="confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-title"
+      >
+        <span className="confirm-icon">
+          <Icon name="trash" size={24} />
+        </span>
         <h2 id="delete-title">Удалить {person.name}?</h2>
-        <p>Карточка исчезнет из древа. Остальные родственники сохранятся, а связанные линии будут аккуратно удалены.</p>
+        <p>
+          Карточка исчезнет из древа. Остальные родственники сохранятся, а
+          связанные линии будут аккуратно удалены.
+        </p>
         <div className="confirm-actions">
-          <button className="button ghost" onClick={onClose}>Отмена</button>
-          <button className="button danger" onClick={onConfirm}>Удалить</button>
+          <button className="button ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button className="button danger" onClick={onConfirm}>
+            Удалить
+          </button>
         </div>
       </section>
     </div>
@@ -780,21 +1628,34 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         if (!rect) return null;
         return {
           x: rect.centerX,
-          y: side === "top" ? rect.top : side === "center" ? rect.centerY : rect.bottom,
+          y:
+            side === "top"
+              ? rect.top
+              : side === "center"
+                ? rect.centerY
+                : rect.bottom,
         };
       };
-      const parentOrigin = (parentIds) => {
-        if (parentIds.length === 1) return point(parentIds[0], "top");
-        const parentPoints = parentIds.map((parentId) => point(parentId, "center")).filter(Boolean);
+      const parentOrigin = (parentIds, childrenBelow) => {
+        if (parentIds.length === 1) return point(parentIds[0], childrenBelow ? "bottom" : "top");
+        const parentPoints = parentIds
+          .map((parentId) => point(parentId, "center"))
+          .filter(Boolean);
         if (!parentPoints.length) return null;
         return {
-          x: parentPoints.reduce((sum, item) => sum + item.x, 0) / parentPoints.length,
-          y: parentPoints.reduce((sum, item) => sum + item.y, 0) / parentPoints.length,
+          x:
+            parentPoints.reduce((sum, item) => sum + item.x, 0) /
+            parentPoints.length,
+          y:
+            parentPoints.reduce((sum, item) => sum + item.y, 0) /
+            parentPoints.length,
         };
       };
       const families = new Map();
       people.forEach((child) => {
-        const parentIds = child.parents.filter((id) => nodes.current.has(id)).sort();
+        const parentIds = child.parents
+          .filter((id) => nodes.current.has(id))
+          .sort();
         if (!parentIds.length) return;
         const key = parentIds.join("--");
         if (!families.has(key)) families.set(key, { parentIds, children: [] });
@@ -802,10 +1663,16 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
       });
       const routes = [];
       families.forEach(({ parentIds, children }, familyId) => {
-        const childPoints = children.map((childId) => point(childId, "bottom")).filter(Boolean).sort((first, second) => first.x - second.x);
-        const from = parentOrigin(parentIds);
+        const parentBoxes = parentIds.map(box).filter(Boolean);
+        const childBoxes = children.map(box).filter(Boolean);
+        const childrenBelow = childBoxes.reduce((sum, rect) => sum + rect.centerY, 0) / Math.max(1, childBoxes.length) > parentBoxes.reduce((sum, rect) => sum + rect.centerY, 0) / Math.max(1, parentBoxes.length);
+        const childPoints = children
+          .map((childId) => point(childId, childrenBelow ? "top" : "bottom"))
+          .filter(Boolean)
+          .sort((first, second) => first.x - second.x);
+        const from = parentOrigin(parentIds, childrenBelow);
         if (!from || !childPoints.length) return;
-        const nearestChildY = Math.max(...childPoints.map((item) => item.y));
+        const nearestChildY = Math.min(...childPoints.map((item) => item.y));
         const firstChildX = childPoints[0].x;
         const lastChildX = childPoints[childPoints.length - 1].x;
         const safeReach = (GENERATION_GAP - CARD_HEIGHT) / 2;
@@ -817,7 +1684,7 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
           from,
           firstChildX,
           lastChildX,
-          baseJunctionY: nearestChildY + Math.min((from.y - nearestChildY) * .5, safeReach),
+          baseJunctionY: from.y + (nearestChildY - from.y) * 0.55,
           minY: Math.min(from.y, nearestChildY) + 16,
           maxY: Math.max(from.y, nearestChildY) - 16,
           left: Math.min(firstChildX, from.x),
@@ -825,67 +1692,103 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
           lane: 0,
         });
       });
-      const orderedRoutes = routes.slice().sort((first, second) => first.left - second.left || first.from.x - second.from.x);
+      const orderedRoutes = routes
+        .slice()
+        .sort(
+          (first, second) =>
+            first.left - second.left || first.from.x - second.from.x,
+        );
       orderedRoutes.forEach((route, routeIndex) => {
         const usedLanes = new Set();
         orderedRoutes.slice(0, routeIndex).forEach((previous) => {
-          const sameLevel = Math.abs(previous.baseJunctionY - route.baseJunctionY) < 8;
-          const overlaps = Math.min(previous.right, route.right) - Math.max(previous.left, route.left) > -8;
-          const sharesParent = previous.parentIds.some((parentId) => route.parentIds.includes(parentId));
-          if (sameLevel && (overlaps || sharesParent)) usedLanes.add(previous.lane);
+          const sameLevel =
+            Math.abs(previous.baseJunctionY - route.baseJunctionY) < 8;
+          const overlaps =
+            Math.min(previous.right, route.right) -
+              Math.max(previous.left, route.left) >
+            -8;
+          const sharesParent = previous.parentIds.some((parentId) =>
+            route.parentIds.includes(parentId),
+          );
+          if (sameLevel && (overlaps || sharesParent))
+            usedLanes.add(previous.lane);
         });
         while (usedLanes.has(route.lane)) route.lane += 1;
       });
       const laneOffset = (lane) => -8 - lane * 24;
       const next = orderedRoutes.map((route) => {
         const { id, childPoints, from, firstChildX, lastChildX } = route;
-        const junctionY = Math.max(route.minY, Math.min(route.maxY, route.baseJunctionY + laneOffset(route.lane)));
+        const junctionY = Math.max(
+          route.minY,
+          Math.min(route.maxY, route.baseJunctionY + laneOffset(route.lane)),
+        );
         const segments = [`M ${from.x} ${from.y} V ${junctionY}`];
-        if (childPoints.length > 1) segments.push(`M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`);
-        childPoints.forEach((childPoint) => segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`));
-        if (childPoints.length === 1 && firstChildX !== from.x) segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
-        const distant = (route.right - route.left) > CARD_WIDTH * 4.5;
-        return { id, d: segments.join(" "), color: branchColor(id), nodeX: from.x, nodeY: junctionY, parentIds: route.parentIds, childIds: route.childIds, distant };
+        if (childPoints.length > 1)
+          segments.push(
+            `M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`,
+          );
+        childPoints.forEach((childPoint) =>
+          segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`),
+        );
+        if (childPoints.length === 1 && firstChildX !== from.x)
+          segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
+        const distant = route.right - route.left > CARD_WIDTH * 4.5;
+        return {
+          id,
+          d: segments.join(" "),
+          color: branchColor(id),
+          nodeX: from.x,
+          nodeY: junctionY,
+          parentIds: route.parentIds,
+          childIds: route.childIds,
+          distant,
+        };
       });
       setPaths(next);
 
       const seenMarriages = new Set();
       const nextMarriages = [];
-      people.forEach((person) => person.partnerIds.forEach((partnerId) => {
-        const id = marriageKey(person.id, partnerId);
-        if (seenMarriages.has(id)) return;
-        seenMarriages.add(id);
-        const partner = peopleById.get(partnerId);
-        const first = box(person.id);
-        const second = box(partnerId);
-        if (!partner || !first || !second) return;
-        const dx = second.centerX - first.centerX;
-        const dy = second.centerY - first.centerY;
-        let from;
-        let to;
-        let d;
-        if (Math.abs(dx) >= Math.abs(dy)) {
-          from = { x: dx >= 0 ? first.right : first.left, y: first.centerY };
-          to = { x: dx >= 0 ? second.left : second.right, y: second.centerY };
-          const midX = (from.x + to.x) / 2;
-          d = `M ${from.x} ${from.y} H ${midX} V ${to.y} H ${to.x}`;
-        } else {
-          from = { x: first.centerX, y: dy >= 0 ? first.bottom : first.top };
-          to = { x: second.centerX, y: dy >= 0 ? second.top : second.bottom };
-          const midY = (from.y + to.y) / 2;
-          d = `M ${from.x} ${from.y} V ${midY} H ${to.x} V ${to.y}`;
-        }
-        nextMarriages.push({
-          id,
-          d,
-          color: branchColor(id),
-          nodeX: (from.x + to.x) / 2,
-          nodeY: (from.y + to.y) / 2,
-          current: person.currentPartnerId === partnerId || partner.currentPartnerId === person.id,
-          former: person.formerPartnerIds.includes(partnerId) || partner.formerPartnerIds.includes(person.id),
-          people: [person.id, partnerId],
-        });
-      }));
+      people.forEach((person) =>
+        person.partnerIds.forEach((partnerId) => {
+          const id = marriageKey(person.id, partnerId);
+          if (seenMarriages.has(id)) return;
+          seenMarriages.add(id);
+          const partner = peopleById.get(partnerId);
+          const first = box(person.id);
+          const second = box(partnerId);
+          if (!partner || !first || !second) return;
+          const dx = second.centerX - first.centerX;
+          const dy = second.centerY - first.centerY;
+          let from;
+          let to;
+          let d;
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            from = { x: dx >= 0 ? first.right : first.left, y: first.centerY };
+            to = { x: dx >= 0 ? second.left : second.right, y: second.centerY };
+            const midX = (from.x + to.x) / 2;
+            d = `M ${from.x} ${from.y} H ${midX} V ${to.y} H ${to.x}`;
+          } else {
+            from = { x: first.centerX, y: dy >= 0 ? first.bottom : first.top };
+            to = { x: second.centerX, y: dy >= 0 ? second.top : second.bottom };
+            const midY = (from.y + to.y) / 2;
+            d = `M ${from.x} ${from.y} V ${midY} H ${to.x} V ${to.y}`;
+          }
+          nextMarriages.push({
+            id,
+            d,
+            color: branchColor(id),
+            nodeX: (from.x + to.x) / 2,
+            nodeY: (from.y + to.y) / 2,
+            current:
+              person.currentPartnerId === partnerId ||
+              partner.currentPartnerId === person.id,
+            former:
+              person.formerPartnerIds.includes(partnerId) ||
+              partner.formerPartnerIds.includes(person.id),
+            people: [person.id, partnerId],
+          });
+        }),
+      );
       setMarriages(nextMarriages);
     };
     const frame = requestAnimationFrame(draw);
@@ -901,33 +1804,51 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
       window.removeEventListener("family-layout-change", draw);
     };
   }, [people, nodes, stage, scale]);
-  const selectedPerson = selectedId ? people.find((person) => person.id === selectedId) : null;
+  const selectedPerson = selectedId
+    ? people.find((person) => person.id === selectedId)
+    : null;
   return (
     <svg className="connections" aria-hidden="true">
       {marriages.map((marriage) => {
-        const isFocused = selectedPerson && marriage.people.includes(selectedPerson.id);
+        const isFocused =
+          selectedPerson && marriage.people.includes(selectedPerson.id);
         return (
           <g
             key={marriage.id}
             className={`marriage-connection ${marriage.current ? "is-current" : ""} ${marriage.former ? "is-former" : ""} ${isFocused ? "is-focused" : ""} ${selectedPerson && !isFocused ? "is-dimmed-line" : ""}`}
             style={{ "--branch-color": marriage.color }}
           >
-            <path d={marriage.d} className="marriage-line"/>
-            <circle cx={marriage.nodeX - 4} cy={marriage.nodeY} r="4.5"/>
-            <circle cx={marriage.nodeX + 4} cy={marriage.nodeY} r="4.5"/>
+            <path d={marriage.d} className="marriage-line" />
+            <circle cx={marriage.nodeX - 4} cy={marriage.nodeY} r="4.5" />
+            <circle cx={marriage.nodeX + 4} cy={marriage.nodeY} r="4.5" />
           </g>
         );
       })}
       {paths.map((path) => {
         const isFlow = selectedPerson
-          ? path.parentIds.includes(selectedPerson.id) || path.childIds.includes(selectedPerson.id)
+          ? path.parentIds.includes(selectedPerson.id) ||
+            path.childIds.includes(selectedPerson.id)
           : false;
         const isDim = selectedPerson ? !isFlow : false;
-        const classes = [isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : "", path.distant && !isFlow ? "is-distant" : ""].filter(Boolean).join(" ");
+        const classes = [
+          isFlow ? "is-flowing" : isDim ? "is-dimmed-line" : "",
+          path.distant && !isFlow ? "is-distant" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         return (
-          <g key={path.id} className={classes} style={{ "--branch-color": path.color }}>
-            <path d={path.d} className="parent-line"/>
-            <circle className="branch-node" cx={path.nodeX} cy={path.nodeY} r="5"/>
+          <g
+            key={path.id}
+            className={classes}
+            style={{ "--branch-color": path.color }}
+          >
+            <path d={path.d} className="parent-line" />
+            <circle
+              className="branch-node"
+              cx={path.nodeX}
+              cy={path.nodeY}
+              r="5"
+            />
           </g>
         );
       })}
@@ -940,8 +1861,12 @@ function App() {
   if (initialLocalPeople.current === null) {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      initialLocalPeople.current = Array.isArray(stored) ? normalizePeople(stored) : [];
-    } catch { initialLocalPeople.current = []; }
+      initialLocalPeople.current = Array.isArray(stored)
+        ? normalizePeople(stored)
+        : [];
+    } catch {
+      initialLocalPeople.current = [];
+    }
   }
   const [people, setPeople] = useState(initialLocalPeople.current);
   const peopleRef = useRef(initialLocalPeople.current);
@@ -953,7 +1878,13 @@ function App() {
   const [editor, setEditor] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [scale, setScale] = useState(1);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [view, setView] = useState("tree");
+  const [treeScope, setTreeScope] = useState("branch");
+  const [rootId, setRootId] = useState(null);
+  const [manualLayout, setManualLayout] = useState(false);
+  const [generationFilter, setGenerationFilter] = useState("all");
+  const [sort, setSort] = useState("name");
+  const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const stageRef = useRef(null);
@@ -962,23 +1893,35 @@ function App() {
   const selected = people.find((person) => person.id === selectedId) || null;
   const focusIds = selectionFocusIds(people, selectedId);
   const ownerSignedIn = isOwnerUser(authUser);
-  const migrationNeeded = cloudState === "empty" && initialLocalPeople.current.length > 0;
-  const canManage = ownerSignedIn && cloudState !== "loading" && cloudState !== "error" && !migrationNeeded;
+  const migrationNeeded =
+    cloudState === "empty" && initialLocalPeople.current.length > 0;
+  const canManage =
+    ownerSignedIn &&
+    cloudState !== "loading" &&
+    cloudState !== "error" &&
+    !migrationNeeded;
 
   useEffect(() => onAuthStateChanged(auth, setAuthUser), []);
-  useEffect(() => subscribeToPeople((cloudPeople) => {
-    if (!cloudPeople.length) {
-      setCloudState("empty");
-      return;
-    }
-    const normalized = normalizePeople(cloudPeople);
-    peopleRef.current = normalized;
-    setPeople(normalized);
-    setCloudState("ready");
-  }, () => {
-    setCloudState("error");
-    setNotice("Не удалось подключиться к общему древу");
-  }), []);
+  useEffect(
+    () =>
+      subscribeToPeople(
+        (cloudPeople) => {
+          if (!cloudPeople.length) {
+            setCloudState("empty");
+            return;
+          }
+          const normalized = normalizePeople(cloudPeople);
+          peopleRef.current = normalized;
+          setPeople(normalized);
+          setCloudState("ready");
+        },
+        () => {
+          setCloudState("error");
+          setNotice("Не удалось подключиться к общему древу");
+        },
+      ),
+    [],
+  );
   useEffect(() => {
     if (!ownerSignedIn || !migrationNeeded || migrationStarted.current) return;
     migrationStarted.current = true;
@@ -994,7 +1937,9 @@ function App() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(people));
     } catch {
-      setNotice("Хранилище браузера заполнено. Попробуйте фото меньшего размера.");
+      setNotice(
+        "Хранилище браузера заполнено. Попробуйте фото меньшего размера.",
+      );
     }
   }, [people]);
   useEffect(() => {
@@ -1005,11 +1950,17 @@ function App() {
 
   const commitPeople = (createNext, successMessage) => {
     if (!canManage) {
-      setNotice(ownerSignedIn ? "Дождитесь окончания синхронизации" : "Войдите как владелец");
+      setNotice(
+        ownerSignedIn
+          ? "Дождитесь окончания синхронизации"
+          : "Войдите как владелец",
+      );
       return peopleRef.current;
     }
     const previous = peopleRef.current;
-    const next = normalizePeople(typeof createNext === "function" ? createNext(previous) : createNext);
+    const next = normalizePeople(
+      typeof createNext === "function" ? createNext(previous) : createNext,
+    );
     peopleRef.current = next;
     setPeople(next);
     syncPeople(previous, next)
@@ -1036,54 +1987,145 @@ function App() {
         setNotice("Вход выполнен. Древо синхронизируется");
       }
     } catch (error) {
-      if (error?.code !== "auth/popup-closed-by-user") setNotice("Не удалось войти через Google");
+      if (error?.code !== "auth/popup-closed-by-user")
+        setNotice("Не удалось войти через Google");
     }
   };
 
   const searchResult = searchFamilyBranch(people, query);
-  const visiblePeople = searchResult.visiblePeople;
+  const defaultRoot = useMemo(
+    () =>
+      people.find((person) => {
+        const count = directRelatives(people, person).length;
+        return person.photo && count >= 4 && count <= 8;
+      }) || people[0],
+    [people],
+  );
+  const branchRoot = people.find((p) => p.id === rootId) || defaultRoot;
+  const branchIds = new Set(
+    branchRoot
+      ? [branchRoot.id, ...directRelatives(people, branchRoot).map((p) => p.id)]
+      : [],
+  );
+  const visiblePeople = searchResult.visiblePeople.filter(
+    (person) =>
+      (query.trim() || treeScope === "all" || branchIds.has(person.id)) &&
+      (generationFilter === "all" ||
+        person.generation === Number(generationFilter)),
+  );
+  const directoryPeople = people
+    .filter(
+      (person) =>
+        (generationFilter === "all" ||
+          person.generation === Number(generationFilter)) &&
+        (!query.trim() ||
+          [person.name, person.maidenName, person.birthplace]
+            .join(" ")
+            .toLocaleLowerCase("ru")
+            .includes(query.trim().toLocaleLowerCase("ru"))),
+    )
+    .sort((a, b) =>
+      sort === "birth"
+        ? dateSortValue(a.birth) - dateSortValue(b.birth)
+        : a.name.localeCompare(b.name, "ru"),
+    );
+  const generations = [
+    ...new Set(people.map((person) => person.generation)),
+  ].sort((a, b) => a - b);
+  const photoPeople = directoryPeople.filter((person) => person.photo);
+  const selectPerson = (id) => {
+    setSelectedId(id);
+    setSheetExpanded(true);
+  };
+  const exportArchive = () => {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          { version: 2, exportedAt: new Date().toISOString(), people },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `istoki-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice("Семейный архив сохранён");
+  };
   const searchMatchIds = searchResult.matchIds;
-  const familyLayout = buildHierarchyLayout(visiblePeople);
+  const familyLayout = buildHierarchyLayout(
+    manualLayout
+      ? visiblePeople
+      : visiblePeople.map((p) => ({ ...p, manualPositionVersion: 0 })),
+  );
   const canvasFrame = buildCanvasFrame(familyLayout, DEFAULT_CANVAS_MARGIN);
   const canvasOffsetX = canvasFrame.offsetX;
   const canvasOffsetY = canvasFrame.offsetY;
   const stageWidth = canvasFrame.width;
   const stageHeight = canvasFrame.height;
-  const register = (id, node) => node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
-  const hasManualLayout = people.some((person) => person.manualPositionVersion === MANUAL_POSITION_VERSION && Number.isFinite(person.manualX) && Number.isFinite(person.manualY));
+  const register = (id, node) =>
+    node ? nodeRefs.current.set(id, node) : nodeRefs.current.delete(id);
+  const hasManualLayout = people.some(
+    (person) =>
+      person.manualPositionVersion === MANUAL_POSITION_VERSION &&
+      Number.isFinite(person.manualX) &&
+      Number.isFinite(person.manualY),
+  );
   const handlePersonDrag = (id, x, y) => {
-    commitPeople((current) => current.map((person) => person.id === id ? {
-      ...person,
-      manualX: x,
-      manualY: y,
-      manualPositionVersion: MANUAL_POSITION_VERSION,
-    } : person), "Расположение сохранено");
+    commitPeople(
+      (current) =>
+        current.map((person) =>
+          person.id === id
+            ? {
+                ...person,
+                manualX: x,
+                manualY: y,
+                manualPositionVersion: MANUAL_POSITION_VERSION,
+              }
+            : person,
+        ),
+      "Расположение сохранено",
+    );
   };
-  const resetLayout = () => commitPeople((current) => current.map((person) => ({
-    ...person,
-    manualX: null,
-    manualY: null,
-    manualPositionVersion: 0,
-  })), "Раскладка сброшена");
+  const resetLayout = () =>
+    commitPeople(
+      (current) =>
+        current.map((person) => ({
+          ...person,
+          manualX: null,
+          manualY: null,
+          manualPositionVersion: 0,
+        })),
+      "Раскладка сброшена",
+    );
   const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
     if (!board) return;
-    const contentCenterX = canvasOffsetX + (familyLayout.contentLeft + familyLayout.contentRight) / 2;
+    const contentCenterX =
+      canvasOffsetX +
+      (familyLayout.contentLeft + familyLayout.contentRight) / 2;
     const contentTop = canvasOffsetY + familyLayout.contentTop;
     board.scrollTo({
       left: Math.max(0, contentCenterX * scale - board.clientWidth / 2),
-      top: Math.max(0, (contentTop - 48) * scale),
+      top: Math.max(0, contentTop * scale - 110),
       behavior,
     });
   };
   const treeScale = () => {
     const board = boardRef.current;
     if (!board) return null;
-    const fitWidth = Math.max(940, familyLayout.contentWidth + FIT_PADDING * 2);
-    const fitHeight = Math.max(770, familyLayout.contentHeight + FIT_PADDING * 2);
+    const fitWidth = Math.max(360, familyLayout.contentWidth + FIT_PADDING * 2);
+    const fitHeight = Math.max(
+      280,
+      familyLayout.contentHeight + FIT_PADDING * 2,
+    );
     const widthScale = (board.clientWidth - 40) / fitWidth;
     const heightScale = (board.clientHeight - 40) / fitHeight;
-    const fittedScale = Math.max(.08, Math.min(1, widthScale, heightScale));
+    const fittedScale = Math.max(0.08, Math.min(1, widthScale, heightScale));
     return +fittedScale.toFixed(2);
   };
   const fitTree = () => {
@@ -1092,22 +2134,86 @@ function App() {
   };
   const didAutoFit = useRef(false);
   useEffect(() => {
+    didAutoFit.current = false;
+  }, [treeScope, rootId, query, generationFilter, manualLayout, selectedId]);
+  useEffect(() => {
     if (!people.length || didAutoFit.current) return;
     const board = boardRef.current;
     if (!board || !board.clientWidth) return;
     didAutoFit.current = true;
     const frame = requestAnimationFrame(() => {
       const fittedScale = treeScale();
-      if (fittedScale != null) setScale(fittedScale);
+      if (fittedScale != null)
+        setScale(
+          window.matchMedia("(max-width: 650px)").matches &&
+            treeScope === "branch"
+            ? Math.max(0.65, fittedScale)
+            : fittedScale,
+        );
     });
     return () => cancelAnimationFrame(frame);
-  }, [people.length, familyLayout.contentWidth, familyLayout.contentHeight]);
-  useEffect(() => { setSheetExpanded(false); }, [selectedId]);
+  }, [
+    people.length,
+    familyLayout.contentWidth,
+    familyLayout.contentHeight,
+    rootId,
+    treeScope,
+    query,
+    generationFilter,
+    manualLayout,
+    selectedId,
+  ]);
+  useEffect(() => {
+    setSheetExpanded(false);
+  }, [selectedId]);
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        setSelectedId(null);
+        setEditor(false);
+        setHelpOpen(false);
+        setDeleteCandidate(null);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        document.getElementById("family-search")?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board || view !== "tree") return;
+    const observer = new ResizeObserver(() =>
+      window.dispatchEvent(new Event("family-layout-change")),
+    );
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, [view, selectedId]);
   useEffect(() => {
     if (!people.length) return;
     const frame = requestAnimationFrame(() => centerTree("auto"));
     return () => cancelAnimationFrame(frame);
-  }, [scale, people.length]);
+  }, [
+    scale,
+    people.length,
+    view,
+    query,
+    rootId,
+    treeScope,
+    generationFilter,
+    manualLayout,
+  ]);
+  useEffect(() => {
+    const handleResize = () => {
+      const fitted = treeScale();
+      if (fitted != null) setScale(window.matchMedia("(max-width: 650px)").matches && treeScope === "branch" ? Math.max(.65, fitted) : fitted);
+      requestAnimationFrame(() => centerTree("auto"));
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [scale, people.length, rootId, treeScope, view, selectedId]);
   const previousCanvasOrigin = useRef(null);
   useLayoutEffect(() => {
     const board = boardRef.current;
@@ -1126,29 +2232,16 @@ function App() {
       if (!board || !card) return;
       const boardRect = board.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const left = board.scrollLeft + cardRect.left + cardRect.width / 2 - boardRect.left - board.clientWidth / 2;
+      const left =
+        board.scrollLeft +
+        cardRect.left +
+        cardRect.width / 2 -
+        boardRect.left -
+        board.clientWidth / 2;
       board.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedId]);
-  useEffect(() => {
-    if (!query.trim() || !searchMatchIds.size) return;
-    const frame = requestAnimationFrame(() => {
-      const board = boardRef.current;
-      if (!board) return;
-      const matches = [...searchMatchIds]
-        .map((id) => nodeRefs.current.get(id))
-        .filter(Boolean)
-        .map((node) => ({ node, rect: node.getBoundingClientRect() }));
-      if (!matches.length) return;
-      const lowest = matches.reduce((best, item) => item.rect.bottom > best.rect.bottom ? item : best);
-      const boardRect = board.getBoundingClientRect();
-      const left = board.scrollLeft + lowest.rect.left + lowest.rect.width / 2 - boardRect.left - board.clientWidth / 2;
-      const top = board.scrollTop + lowest.rect.bottom - boardRect.top - board.clientHeight + 96;
-      board.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: "smooth" });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [query, visiblePeople.length, scale]);
   const savePerson = (draft) => {
     const normalizedDraft = normalizePerson(draft);
     if (draft.id) {
@@ -1158,27 +2251,69 @@ function App() {
           if (person.id === normalizedDraft.id) return normalizedDraft;
           const wasPartner = previous?.partnerIds.includes(person.id);
           const isPartner = normalizedDraft.partnerIds.includes(person.id);
-          if (isPartner) return {
-            ...person,
-            partnerIds: [...new Set([...person.partnerIds, normalizedDraft.id])],
-            currentPartnerId: normalizedDraft.currentPartnerId === person.id ? normalizedDraft.id : (person.currentPartnerId === normalizedDraft.id ? "" : person.currentPartnerId),
-            formerPartnerIds: normalizedDraft.formerPartnerIds.includes(person.id) ? [...new Set([...person.formerPartnerIds, normalizedDraft.id])] : person.formerPartnerIds.filter((id) => id !== normalizedDraft.id),
-            generation: normalizedDraft.generation,
-          };
-          if (wasPartner) return { ...person, partnerIds: person.partnerIds.filter((id) => id !== normalizedDraft.id), currentPartnerId: person.currentPartnerId === normalizedDraft.id ? "" : person.currentPartnerId, formerPartnerIds: person.formerPartnerIds.filter((id) => id !== normalizedDraft.id) };
+          if (isPartner)
+            return {
+              ...person,
+              partnerIds: [
+                ...new Set([...person.partnerIds, normalizedDraft.id]),
+              ],
+              currentPartnerId:
+                normalizedDraft.currentPartnerId === person.id
+                  ? normalizedDraft.id
+                  : person.currentPartnerId === normalizedDraft.id
+                    ? ""
+                    : person.currentPartnerId,
+              formerPartnerIds: normalizedDraft.formerPartnerIds.includes(
+                person.id,
+              )
+                ? [...new Set([...person.formerPartnerIds, normalizedDraft.id])]
+                : person.formerPartnerIds.filter(
+                    (id) => id !== normalizedDraft.id,
+                  ),
+              generation: normalizedDraft.generation,
+            };
+          if (wasPartner)
+            return {
+              ...person,
+              partnerIds: person.partnerIds.filter(
+                (id) => id !== normalizedDraft.id,
+              ),
+              currentPartnerId:
+                person.currentPartnerId === normalizedDraft.id
+                  ? ""
+                  : person.currentPartnerId,
+              formerPartnerIds: person.formerPartnerIds.filter(
+                (id) => id !== normalizedDraft.id,
+              ),
+            };
           return person;
         });
       }, "Запись сохранена в общем древе");
       setSelectedId(normalizedDraft.id);
     } else {
       const created = { ...normalizedDraft, id: `person-${Date.now()}` };
-      commitPeople((current) => [...current.map((person) => created.partnerIds.includes(person.id) ? {
-        ...person,
-        partnerIds: [...new Set([...person.partnerIds, created.id])],
-        currentPartnerId: created.currentPartnerId === person.id ? created.id : person.currentPartnerId,
-        formerPartnerIds: created.formerPartnerIds.includes(person.id) ? [...new Set([...person.formerPartnerIds, created.id])] : person.formerPartnerIds,
-        generation: created.generation,
-      } : person), created], "Человек добавлен в общее древо");
+      commitPeople(
+        (current) => [
+          ...current.map((person) =>
+            created.partnerIds.includes(person.id)
+              ? {
+                  ...person,
+                  partnerIds: [...new Set([...person.partnerIds, created.id])],
+                  currentPartnerId:
+                    created.currentPartnerId === person.id
+                      ? created.id
+                      : person.currentPartnerId,
+                  formerPartnerIds: created.formerPartnerIds.includes(person.id)
+                    ? [...new Set([...person.formerPartnerIds, created.id])]
+                    : person.formerPartnerIds,
+                  generation: created.generation,
+                }
+              : person,
+          ),
+          created,
+        ],
+        "Человек добавлен в общее древо",
+      );
       setSelectedId(created.id);
     }
     setEditor(false);
@@ -1186,97 +2321,669 @@ function App() {
   const deletePerson = () => {
     if (!deleteCandidate) return;
     const id = deleteCandidate.id;
-    commitPeople((current) => current
-      .filter((person) => person.id !== id)
-      .map((person) => ({
-        ...person,
-        parents: person.parents.filter((parentId) => parentId !== id),
-        partnerIds: person.partnerIds.filter((partnerId) => partnerId !== id),
-        currentPartnerId: person.currentPartnerId === id ? "" : person.currentPartnerId,
-        formerPartnerIds: person.formerPartnerIds.filter((partnerId) => partnerId !== id),
-      })), "Человек удалён из общего древа");
+    commitPeople(
+      (current) =>
+        current
+          .filter((person) => person.id !== id)
+          .map((person) => ({
+            ...person,
+            parents: person.parents.filter((parentId) => parentId !== id),
+            partnerIds: person.partnerIds.filter(
+              (partnerId) => partnerId !== id,
+            ),
+            currentPartnerId:
+              person.currentPartnerId === id ? "" : person.currentPartnerId,
+            formerPartnerIds: person.formerPartnerIds.filter(
+              (partnerId) => partnerId !== id,
+            ),
+          })),
+      "Человек удалён из общего древа",
+    );
     setSelectedId(null);
     setDeleteCandidate(null);
   };
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#tree" aria-label="Истоки — на главную"><span className="tree-rings" aria-hidden="true"><i/><i/><i/><i/></span><span>Истоки</span></a>
-        <nav aria-label="Основная навигация">
-          <button className="nav-item active"><Icon name="tree"/><span>Древо</span></button>
-          <button className="nav-item" onClick={() => setNotice("Раздел семьи появится на следующем этапе")}><Icon name="users"/><span>Семья</span></button>
-          <button className="nav-item" onClick={() => setNotice("Источники добавим вместе с документами")}><Icon name="book"/><span>Источники</span></button>
-        </nav>
-        <div className="header-actions">
-          {searchOpen && <input className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Найти человека" aria-label="Найти человека" autoFocus />}
-          {canManage && <button className="button primary add-button" onClick={() => setEditor("new")}><Icon name="plus"/><span>Добавить человека</span></button>}
-          <button className="icon-button" onClick={() => { setSearchOpen((open) => !open); setQuery(""); }} aria-label="Поиск"><Icon name={searchOpen ? "close" : "search"}/></button>
-          <button className={`cloud-login-button ${ownerSignedIn ? "is-owner" : ""}`} onClick={handleOwnerAccess} title={ownerSignedIn ? "Выйти из режима редактирования" : "Войти владельцу"}><Icon name="cloud" size={18}/><span>{ownerSignedIn ? cloudState === "ready" ? "Общее древо" : "Синхронизация…" : "Войти"}</span></button>
+      <aside className="sidebar">
+        <a
+          className="brand"
+          href="#tree"
+          onClick={() => setView("tree")}
+          aria-label="Истоки — семейное древо"
+        >
+          <span className="tree-rings" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+          <span>
+            Истоки<small>Семейный архив</small>
+          </span>
+        </a>
+        <div className="sidebar-family">
+          <span className="family-monogram">И</span>
+          <div>
+            <strong>Моя семья</strong>
+            <small>История, которая нас связывает</small>
+          </div>
         </div>
-      </header>
-
-      <main id="tree" className="workspace">
-        <section className={`tree-area ${selected ? "has-detail" : ""}`} aria-label="Семейное древо">
-          <div className="canvas-heading">
-            <div><h1>Семейное древо</h1></div>
-            <div className="zoom-controls" aria-label="Масштаб">
-              <button onClick={() => setScale((value) => Math.max(.08, +(value - .1).toFixed(2)))} aria-label="Уменьшить">−</button>
-              <output>{Math.round(scale * 100)}%</output>
-              <button onClick={() => setScale((value) => Math.min(1.25, +(value + .1).toFixed(2)))} aria-label="Увеличить">+</button>
-              <button className="center-button" onClick={fitTree}><Icon name="target" size={18}/>Вместить древо</button>
-              {canManage && hasManualLayout && <button className="center-button" onClick={resetLayout} title="Вернуть автоматическую раскладку">Сбросить раскладку</button>}
-            </div>
+        <nav aria-label="Основная навигация">
+          {[
+            ["tree", "tree", "Семейное древо"],
+            ["family", "users", "Все родственники"],
+            ["photos", "photo", "Фотоальбом"],
+          ].map(([id, icon, label]) => (
+            <button
+              key={id}
+              aria-label={label}
+              className={`nav-item ${view === id ? "active" : ""}`}
+              onClick={() => {
+                setView(id);
+                setGenerationFilter("all");
+              }}
+              aria-current={view === id ? "page" : undefined}
+            >
+              <Icon name={icon} />
+              <span>{label}</span>
+              {id === "family" && <small>{people.length}</small>}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="archive-note">
+            <Icon name="book" size={26} />
+            <p>
+              Сохраняем имена.
+              <br />
+              <em>Продолжаем историю.</em>
+            </p>
+            <span>Для тех, кто будет после нас.</span>
           </div>
-
-          <div className="tree-board" ref={boardRef} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
-            <div className="tree-scaler" style={{ width: `${stageWidth * scale}px`, minWidth: `${stageWidth * scale}px`, minHeight: `${stageHeight * scale}px` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
-              <div className="tree-stage" ref={stageRef} style={{ width: `${stageWidth}px`, minWidth: `${stageWidth}px`, height: `${stageHeight}px`, transform: `scale(${scale})` }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
-                {people.length === 0 ? (
-                  <div className="empty-tree">
-                    <span className="empty-rings" aria-hidden="true"><i/><i/><i/></span>
-                    <h2>Начните с корней</h2>
-                    <p>Добавьте самого дальнего известного предка. От него постепенно вырастут ветви вашей семьи.</p>
-                    {canManage ? <button className="button primary" onClick={() => setEditor("new")}><Icon name="plus"/>Добавить первого предка</button> : <button className="button ghost" onClick={handleOwnerAccess}><Icon name="cloud"/>Войти владельцу</button>}
-                  </div>
-                ) : <>
-                {familyLayout.clusters.map((cluster) => (
-                  <div
-                    className={`family-cluster ${focusIds && !cluster.people.some((person) => focusIds.has(person.id)) ? "is-dimmed" : ""}`}
-                    key={cluster.id}
-                    style={{
-                      "--family-color": branchColor(cluster.id),
-                      left: `${cluster.x + canvasOffsetX - 14}px`,
-                      top: `${cluster.y + canvasOffsetY - 14}px`,
-                      width: `${cluster.width + 28}px`,
-                      height: `${cluster.height + 28}px`,
-                    }}
-                    aria-hidden="true"
-                  >
-                    <span>В браке</span>
-                  </div>
-                ))}
-                {familyLayout.generations.map((row) => (
-                  <div className="generation-guide" key={row.generation} style={{ top: `${row.y + canvasOffsetY - 24}px` }} aria-hidden="true">
-                    <span>{generationLabel(row.generation)}</span>
-                  </div>
-                ))}
-                <TreeConnections people={visiblePeople} nodes={nodeRefs} stage={stageRef} scale={scale} selectedId={selectedId}/>
-                {familyLayout.cards.map((card) => <PositionedPerson key={card.person.id} card={card} selectedId={selectedId} focusIds={focusIds} onSelect={setSelectedId} register={register} canManage={canManage} scale={scale} canvasOffsetX={canvasOffsetX} canvasOffsetY={canvasOffsetY} onDragEnd={handlePersonDrag}/>)}
-                {!visiblePeople.length && <div className="no-results">Никого не нашли. Попробуйте изменить запрос.</div>}
-                </>}
+          <button
+            className="nav-item utility"
+            onClick={() => setHelpOpen(true)}
+          >
+            <Icon name="help" />
+            <span>Как устроено древо</span>
+          </button>
+          <button className="owner-button" onClick={handleOwnerAccess}>
+            <span className="owner-avatar">
+              <Icon name="user" />
+            </span>
+            <span>
+              <strong>
+                {ownerSignedIn ? "Хранитель истории" : "Войти в архив"}
+              </strong>
+              <small>
+                {ownerSignedIn
+                  ? "Режим владельца · выйти"
+                  : "Редактирование для владельца"}
+              </small>
+            </span>
+            <Icon name="chevron" size={16} />
+          </button>
+        </div>
+      </aside>
+      <div className="main-shell">
+        <header className="topbar">
+          <div className="breadcrumb">
+            <span>Моя семья</span>
+            <Icon name="chevron" size={13} />
+            <strong>
+              {view === "tree"
+                ? "Семейное древо"
+                : view === "family"
+                  ? "Все родственники"
+                  : "Фотоальбом"}
+            </strong>
+          </div>
+          <div className="header-actions">
+            <label className="search-field">
+              <Icon name="search" size={18} />
+              <input
+                id="family-search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Найти родственника…"
+                aria-label="Найти родственника"
+              />
+              {query ? (
+                <button
+                  className="clear-search"
+                  onClick={() => setQuery("")}
+                  aria-label="Очистить поиск"
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              ) : (
+                <kbd>⌘ K</kbd>
+              )}
+            </label>
+            <button
+              className="button primary add-button"
+              aria-label="Добавить человека"
+              onClick={() =>
+                canManage ? setEditor("new") : handleOwnerAccess()
+              }
+            >
+              <Icon name="plus" size={18} />
+              <span>Добавить человека</span>
+            </button>
+          </div>
+        </header>
+        <div className="page-intro">
+          <div>
+            <h1>
+              {view === "tree"
+                ? "Семейное древо"
+                : view === "family"
+                  ? "Близкие. Через поколения."
+                  : "Лица нашей истории"}
+            </h1>
+            <p>
+              {view === "tree"
+                ? "Каждое имя — часть вашей истории."
+                : view === "family"
+                  ? "Все, кто делает вашу семью семьёй."
+                  : "Снимки, в которых живёт память о родных."}
+            </p>
+          </div>
+          <div className="intro-actions">
+            <span
+              className={`sync-state ${cloudState === "error" ? "offline" : ""}`}
+            >
+              <i />
+              {cloudState === "loading"
+                ? "Подключаем архив"
+                : cloudState === "error"
+                  ? "Нет связи с архивом"
+                  : "Общее семейное древо"}
+            </span>
+            <button
+              className="export-button"
+              aria-label="Сохранить архив"
+              onClick={exportArchive}
+              disabled={!people.length}
+            >
+              <Icon name="download" size={16} />
+              <span>Сохранить архив</span>
+            </button>
+          </div>
+        </div>
+        <main id="tree" className="workspace">
+          <section
+            className={`tree-area ${selected ? "has-detail" : ""}`}
+            aria-label="Семейный архив"
+          >
+            <div className="canvas-heading">
+              <div className="view-switch" aria-label="Вид архива">
+                <button
+                  className={view === "tree" ? "active" : ""}
+                  onClick={() => setView("tree")}
+                >
+                  <Icon name="tree" size={16} />
+                  Древо
+                </button>
+                <button
+                  className={view === "family" ? "active" : ""}
+                  onClick={() => setView("family")}
+                >
+                  <Icon name="list" size={16} />
+                  Список
+                </button>
+                <button
+                  className={view === "photos" ? "active" : ""}
+                  onClick={() => setView("photos")}
+                >
+                  <Icon name="photo" size={16} />
+                  Фото
+                </button>
               </div>
+              {view === "tree" && (
+                <div className="scope-switch">
+                  <button
+                    className={treeScope === "branch" ? "active" : ""}
+                    onClick={() => setTreeScope("branch")}
+                  >
+                    Семейная ветвь
+                  </button>
+                  <button
+                    className={treeScope === "all" ? "active" : ""}
+                    onClick={() => setTreeScope("all")}
+                  >
+                    Весь род
+                  </button>
+                </div>
+              )}
+              <label className="generation-filter">
+                <span className="visually-hidden">Поколение</span>
+                <select
+                  value={generationFilter}
+                  onChange={(e) => {
+                    setGenerationFilter(e.target.value);
+                    setSelectedId(null);
+                  }}
+                >
+                  <option value="all">Все поколения</option>
+                  {generations.map((g) => (
+                    <option value={g} key={g}>
+                      {g + 1} поколение
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-          </div>
-        </section>
-
-        <DetailPanel person={selected} people={people} canEdit={canManage} expanded={sheetExpanded} onToggleExpand={() => setSheetExpanded((value) => !value)} onClose={() => setSelectedId(null)} onEdit={() => setEditor(selected)} onDelete={() => setDeleteCandidate(selected)} onSelect={setSelectedId}/>
-      </main>
-      {editor && <PersonEditor person={editor === "new" ? null : editor} people={people} onSave={savePerson} onClose={() => setEditor(false)}/>}
-      {deleteCandidate && <ConfirmDelete person={deleteCandidate} onConfirm={deletePerson} onClose={() => setDeleteCandidate(null)}/>}
-      {notice && <div className="toast" role="status">{notice}</div>}
+            {cloudState === "error" && (
+              <div className="connection-banner" role="status">
+                Не удалось обновить данные.{" "}
+                {people.length
+                  ? "Показана сохранённая копия."
+                  : "Проверьте подключение."}
+                <button onClick={() => window.location.reload()}>
+                  Повторить
+                </button>
+              </div>
+            )}
+            {people.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-album">
+                  <div className="album-line" />
+                  <Icon name="tree" size={64} />
+                  <span>Истоки</span>
+                  <small>Ваша семейная история</small>
+                </div>
+                <h2>
+                  {cloudState === "loading"
+                    ? "Открываем семейный архив…"
+                    : "У каждой истории есть начало"}
+                </h2>
+                <p>
+                  {cloudState === "loading"
+                    ? "Собираем поколения и родственные связи."
+                    : "Начните с одного имени. Добавьте близкого человека, его родителей и воспоминания — так вырастет история вашей семьи."}
+                </p>
+                {cloudState !== "loading" && (
+                  <button
+                    className="button primary"
+                    onClick={() =>
+                      canManage ? setEditor("new") : handleOwnerAccess()
+                    }
+                  >
+                    <Icon name="plus" size={18} />
+                    {canManage
+                      ? "Добавить первого человека"
+                      : "Войти и начать историю"}
+                  </button>
+                )}
+              </div>
+            ) : view === "tree" && !visiblePeople.length ? (
+              <div className="inline-empty"><Icon name="search" size={30}/><h2>Никого не нашли</h2><p>Попробуйте другое имя или поколение.</p><button className="button ghost" onClick={() => {setQuery(""); setGenerationFilter("all");}}>Сбросить фильтры</button></div>
+            ) : view === "tree" ? (
+              <>
+                <div
+                  className="tree-board"
+                  ref={boardRef}
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget)
+                      setSelectedId(null);
+                  }}
+                >
+                  <div
+                    className="tree-scaler"
+                    style={{
+                      width: `${stageWidth * scale}px`,
+                      minWidth: `${stageWidth * scale}px`,
+                      minHeight: `${stageHeight * scale}px`,
+                    }}
+                    onMouseDown={(event) => {
+                      if (event.target === event.currentTarget)
+                        setSelectedId(null);
+                    }}
+                  >
+                    <div
+                      className="tree-stage"
+                      ref={stageRef}
+                      style={{
+                        width: `${stageWidth}px`,
+                        minWidth: `${stageWidth}px`,
+                        height: `${stageHeight}px`,
+                        transform: `scale(${scale})`,
+                      }}
+                      onMouseDown={(event) => {
+                        if (event.target === event.currentTarget)
+                          setSelectedId(null);
+                      }}
+                    >
+                      <>
+                        {familyLayout.clusters.map((cluster) => (
+                          <div
+                            className={`family-cluster ${focusIds && !cluster.people.some((person) => focusIds.has(person.id)) ? "is-dimmed" : ""}`}
+                            key={cluster.id}
+                            style={{
+                              "--family-color": branchColor(cluster.id),
+                              left: `${cluster.x + canvasOffsetX - 14}px`,
+                              top: `${cluster.y + canvasOffsetY - 14}px`,
+                              width: `${cluster.width + 28}px`,
+                              height: `${cluster.height + 28}px`,
+                            }}
+                            aria-hidden="true"
+                          >
+                            <span>В браке</span>
+                          </div>
+                        ))}
+                        {familyLayout.generations.map((row) => (
+                          <div
+                            className="generation-guide"
+                            key={row.generation}
+                            style={{ top: `${row.y + canvasOffsetY - 38}px` }}
+                            aria-hidden="true"
+                          >
+                            <span>{row.generation + 1} поколение</span>
+                          </div>
+                        ))}
+                        <TreeConnections
+                          people={visiblePeople}
+                          nodes={nodeRefs}
+                          stage={stageRef}
+                          scale={scale}
+                          selectedId={selectedId}
+                        />
+                        {familyLayout.cards.map((card) => (
+                          <PositionedPerson
+                            key={card.person.id}
+                            card={card}
+                            selectedId={selectedId}
+                            focusIds={focusIds}
+                            onSelect={selectPerson}
+                            register={register}
+                            canManage={canManage && manualLayout}
+                            scale={scale}
+                            canvasOffsetX={canvasOffsetX}
+                            canvasOffsetY={canvasOffsetY}
+                            onDragEnd={handlePersonDrag}
+                          />
+                        ))}
+                        {!visiblePeople.length && (
+                          <div className="no-results">
+                            Никого не нашли. Попробуйте изменить запрос.
+                          </div>
+                        )}
+                      </>
+                    </div>
+                  </div>
+                </div>
+                {treeScope === "branch" && !query && branchRoot && (
+                  <div className="branch-caption">
+                    <span>Ветвь семьи</span>
+                    <strong>{branchRoot.name}</strong>
+                    <small>
+                      {visiblePeople.length} человек · выберите карточку
+                    </small>
+                  </div>
+                )}
+                <div className="canvas-footer">
+                  <div className="connection-legend">
+                    <span>
+                      <i />
+                      Родители и дети
+                    </span>
+                    <span>
+                      <i className="marriage" />В браке
+                    </span>
+                    <span>
+                      <i className="former" />
+                      Бывший брак
+                    </span>
+                  </div>
+                  <div className="zoom-controls" aria-label="Масштаб">
+                    <button
+                      onClick={() =>
+                        setScale((v) => Math.max(0.08, +(v - 0.1).toFixed(2)))
+                      }
+                      aria-label="Уменьшить"
+                    >
+                      −
+                    </button>
+                    <output>{Math.round(scale * 100)}%</output>
+                    <button
+                      onClick={() =>
+                        setScale((v) => Math.min(1.5, +(v + 0.1).toFixed(2)))
+                      }
+                      aria-label="Увеличить"
+                    >
+                      +
+                    </button>
+                    <button
+                      className="center-button"
+                      onClick={fitTree}
+                      title="Вместить всё древо"
+                    >
+                      <Icon name="target" size={17} />
+                    </button>
+                  </div>
+                </div>
+                {selected && (
+                  <button
+                    className="selection-reset"
+                    onClick={() => setSelectedId(null)}
+                  >
+                    Показаны прямые связи · Снять выделение{" "}
+                    <Icon name="close" size={13} />
+                  </button>
+                )}
+              </>
+            ) : view === "family" ? (
+              <div className="directory">
+                <div className="directory-heading">
+                  <span>Найдено: {directoryPeople.length}</span>
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
+                    aria-label="Сортировка"
+                  >
+                    <option value="name">По имени</option>
+                    <option value="birth">По дате рождения</option>
+                  </select>
+                </div>
+                <div className="family-table">
+                  <div className="table-head">
+                    <span>Родственник</span>
+                    <span>Годы жизни</span>
+                    <span>Место рождения</span>
+                    <span>Поколение</span>
+                  </div>
+                  {directoryPeople.map((person) => (
+                    <button
+                      className={`table-row ${selectedId === person.id ? "selected" : ""}`}
+                      key={person.id}
+                      onClick={() => selectPerson(person.id)}
+                    >
+                      <span className="table-person">
+                        <Portrait person={person} className="list-avatar" />
+                        <span>
+                          <strong>{person.name}</strong>
+                          <small>
+                            {person.maidenName
+                              ? `урожд. ${person.maidenName}`
+                              : person.relation}
+                          </small>
+                        </span>
+                      </span>
+                      <span>{formatLifespan(person)}</span>
+                      <span>{person.birthplace || "Не указано"}</span>
+                      <span>
+                        {person.generation + 1}
+                        <Icon name="chevron" size={15} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {!directoryPeople.length && (
+                  <div className="inline-empty">
+                    <Icon name="search" size={30} />
+                    <h2>Никого не нашли</h2>
+                    <p>Попробуйте другое имя или поколение.</p>
+                    <button
+                      className="button ghost"
+                      onClick={() => {
+                        setQuery("");
+                        setGenerationFilter("all");
+                      }}
+                    >
+                      Сбросить фильтры
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="photo-gallery">
+                {photoPeople.map((person) => (
+                  <button
+                    className="album-photo"
+                    onClick={() => selectPerson(person.id)}
+                    key={person.id}
+                  >
+                    <div>
+                      <img
+                        src={person.photo}
+                        alt={person.name}
+                        style={{
+                          objectPosition: `${person.photoX}% ${person.photoY}%`,
+                        }}
+                        loading="lazy"
+                      />
+                    </div>
+                    <strong>{person.name}</strong>
+                    <span>{formatLifespan(person)}</span>
+                  </button>
+                ))}
+                {!photoPeople.length && (
+                  <div className="inline-empty">
+                    <Icon name="photo" size={36} />
+                    <h2>Место для воспоминаний</h2>
+                    <p>
+                      {query || generationFilter !== "all"
+                        ? "Для выбранных родственников пока нет фотографий."
+                        : "Фотографии появятся здесь, когда вы добавите их в карточки родственников."}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="workspace-status">
+              <span>
+                {people.length} человек · {generations.length} поколений
+              </span>
+              <span>
+                {view === "tree"
+                  ? "Выберите карточку, чтобы увидеть родственные связи"
+                  : "Выберите человека, чтобы открыть его историю"}
+              </span>
+              {canManage && (
+                <button onClick={() => setManualLayout((v) => !v)}>
+                  {manualLayout
+                    ? "Автоматическая раскладка"
+                    : "Ручная раскладка"}
+                </button>
+              )}
+              {canManage && hasManualLayout && manualLayout && (
+                <button onClick={resetLayout}>Сбросить позиции</button>
+              )}
+            </div>
+          </section>
+          <DetailPanel
+            person={selected}
+            people={people}
+            canEdit={canManage}
+            expanded={sheetExpanded}
+            onToggleExpand={() => setSheetExpanded((v) => !v)}
+            onClose={() => setSelectedId(null)}
+            onEdit={() => setEditor(selected)}
+            onDelete={() => setDeleteCandidate(selected)}
+            onSelect={selectPerson}
+            onFocus={() => {
+              setRootId(selected.id);
+              setTreeScope("branch");
+              setQuery("");
+              setGenerationFilter("all");
+              setView("tree");
+            }}
+          />
+        </main>
+      </div>
+      {helpOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => e.target === e.currentTarget && setHelpOpen(false)}
+        >
+          <section
+            className="help-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="help-title"
+          >
+            <button
+              className="icon-button detail-close"
+              onClick={() => setHelpOpen(false)}
+              aria-label="Закрыть справку"
+            >
+              <Icon name="close" />
+            </button>
+            <Icon name="book" size={32} />
+            <h2 id="help-title">У каждой связи — своя история</h2>
+            <p>
+              Нажмите на человека: его ближайшие родные останутся выделенными, а
+              справа откроется история жизни.
+            </p>
+            <ul>
+              <li>Сплошные линии связывают родителей и детей.</li>
+              <li>Двойные кольца обозначают брак, пунктир — бывший брак.</li>
+              <li>Масштаб и кнопка с прицелом помогут увидеть всё древо.</li>
+              <li>
+                Поиск находит родственника и показывает его ближайшую семью.
+              </li>
+              <li>
+                Владелец может добавлять людей, менять связи и перемещать
+                карточки.
+              </li>
+            </ul>
+            <button
+              className="button primary"
+              onClick={() => setHelpOpen(false)}
+            >
+              Вернуться к семье
+            </button>
+          </section>
+        </div>
+      )}
+      {editor && (
+        <PersonEditor
+          person={editor === "new" ? null : editor}
+          people={people}
+          onSave={savePerson}
+          onClose={() => setEditor(false)}
+        />
+      )}
+      {deleteCandidate && (
+        <ConfirmDelete
+          person={deleteCandidate}
+          onConfirm={deletePerson}
+          onClose={() => setDeleteCandidate(null)}
+        />
+      )}
+      {notice && (
+        <div className="toast" role="status">
+          {notice}
+        </div>
+      )}
     </div>
   );
 }
 
-createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
