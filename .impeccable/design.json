@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-15T17:33:09.387923+00:00",
+  "title": "Design System: Истоки",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Светлая бумага",
+        "tonalRamp": [
+          "oklch(15% 0.0066 106.52)",
+          "oklch(27% 0.0066 106.52)",
+          "oklch(38% 0.0066 106.52)",
+          "oklch(50% 0.0066 106.52)",
+          "oklch(61% 0.0066 106.52)",
+          "oklch(73% 0.0066 106.52)",
+          "oklch(84% 0.0066 106.52)",
+          "oklch(95% 0.0066 106.52)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Бумага холста",
+        "tonalRamp": [
+          "oklch(15% 0.0067 115.71)",
+          "oklch(27% 0.0067 115.71)",
+          "oklch(38% 0.0067 115.71)",
+          "oklch(50% 0.0067 115.71)",
+          "oklch(61% 0.0067 115.71)",
+          "oklch(73% 0.0067 115.71)",
+          "oklch(84% 0.0067 115.71)",
+          "oklch(95% 0.0067 115.71)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Белое паспарту",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(27% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(50% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(73% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "chrome": {
+        "role": "neutral",
+        "displayName": "Слоновая бумага",
+        "tonalRamp": [
+          "oklch(15% 0.0054 95.10)",
+          "oklch(27% 0.0054 95.10)",
+          "oklch(38% 0.0054 95.10)",
+          "oklch(50% 0.0054 95.10)",
+          "oklch(61% 0.0054 95.10)",
+          "oklch(73% 0.0054 95.10)",
+          "oklch(84% 0.0054 95.10)",
+          "oklch(95% 0.0054 95.10)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Графит",
+        "tonalRamp": [
+          "oklch(15% 0.0091 173.67)",
+          "oklch(27% 0.0091 173.67)",
+          "oklch(38% 0.0091 173.67)",
+          "oklch(50% 0.0091 173.67)",
+          "oklch(61% 0.0091 173.67)",
+          "oklch(73% 0.0091 173.67)",
+          "oklch(84% 0.0091 173.67)",
+          "oklch(95% 0.0091 173.67)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Приглушённые чернила",
+        "tonalRamp": [
+          "oklch(15% 0.0133 161.73)",
+          "oklch(27% 0.0133 161.73)",
+          "oklch(38% 0.0133 161.73)",
+          "oklch(50% 0.0133 161.73)",
+          "oklch(61% 0.0133 161.73)",
+          "oklch(73% 0.0133 161.73)",
+          "oklch(84% 0.0133 161.73)",
+          "oklch(95% 0.0133 161.73)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Тонкая граница",
+        "tonalRamp": [
+          "oklch(15% 0.0103 131.37)",
+          "oklch(27% 0.0103 131.37)",
+          "oklch(38% 0.0103 131.37)",
+          "oklch(50% 0.0103 131.37)",
+          "oklch(61% 0.0103 131.37)",
+          "oklch(73% 0.0103 131.37)",
+          "oklch(84% 0.0103 131.37)",
+          "oklch(95% 0.0103 131.37)"
+        ]
+      },
+      "green": {
+        "role": "primary",
+        "displayName": "Архивная зелень",
+        "tonalRamp": [
+          "oklch(15% 0.0555 165.93)",
+          "oklch(27% 0.0555 165.93)",
+          "oklch(38% 0.0555 165.93)",
+          "oklch(50% 0.0555 165.93)",
+          "oklch(61% 0.0555 165.93)",
+          "oklch(73% 0.0555 165.93)",
+          "oklch(84% 0.0555 165.93)",
+          "oklch(95% 0.0555 165.93)"
+        ]
+      },
+      "green-soft": {
+        "role": "primary",
+        "displayName": "Мягкая зелень",
+        "tonalRamp": [
+          "oklch(15% 0.0109 149.86)",
+          "oklch(27% 0.0109 149.86)",
+          "oklch(38% 0.0109 149.86)",
+          "oklch(50% 0.0109 149.86)",
+          "oklch(61% 0.0109 149.86)",
+          "oklch(73% 0.0109 149.86)",
+          "oklch(84% 0.0109 149.86)",
+          "oklch(95% 0.0109 149.86)"
+        ]
+      },
+      "terra": {
+        "role": "primary",
+        "displayName": "Зелёные чернила",
+        "tonalRamp": [
+          "oklch(15% 0.0564 164.53)",
+          "oklch(27% 0.0564 164.53)",
+          "oklch(38% 0.0564 164.53)",
+          "oklch(50% 0.0564 164.53)",
+          "oklch(61% 0.0564 164.53)",
+          "oklch(73% 0.0564 164.53)",
+          "oklch(84% 0.0564 164.53)",
+          "oklch(95% 0.0564 164.53)"
+        ]
+      },
+      "gold": {
+        "role": "secondary",
+        "displayName": "Архивное золото",
+        "tonalRamp": [
+          "oklch(15% 0.0820 80.87)",
+          "oklch(27% 0.0820 80.87)",
+          "oklch(38% 0.0820 80.87)",
+          "oklch(50% 0.0820 80.87)",
+          "oklch(61% 0.0820 80.87)",
+          "oklch(73% 0.0820 80.87)",
+          "oklch(84% 0.0820 80.87)",
+          "oklch(95% 0.0820 80.87)"
+        ]
+      },
+      "gold-soft": {
+        "role": "secondary",
+        "displayName": "Мягкое золото",
+        "tonalRamp": [
+          "oklch(15% 0.0662 88.97)",
+          "oklch(27% 0.0662 88.97)",
+          "oklch(38% 0.0662 88.97)",
+          "oklch(50% 0.0662 88.97)",
+          "oklch(61% 0.0662 88.97)",
+          "oklch(73% 0.0662 88.97)",
+          "oklch(84% 0.0662 88.97)",
+          "oklch(95% 0.0662 88.97)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "person-name": {
+        "displayName": "Имя под портретом",
+        "purpose": "Личная подпись на фотоотпечатке."
+      },
+      "surname": {
+        "displayName": "Фамилия",
+        "purpose": "Короткая прописная подпись над именем."
+      }
+    },
+    "shadows": [
+      {
+        "name": "photoprint",
+        "value": "0 3px 8px #273b2b0d, 0 12px 24px #273b2b09",
+        "purpose": "Белое паспарту над бумагой."
+      },
+      {
+        "name": "photoprint-hover",
+        "value": "0 5px 12px #273b2b15, 0 16px 30px #273b2b13",
+        "purpose": "Hover карточки."
+      },
+      {
+        "name": "canvas-tools",
+        "value": "0 5px 18px #25392908",
+        "purpose": "Плавающие инструменты."
+      },
+      {
+        "name": "inspector",
+        "value": "-6px 10px 35px #25392918",
+        "purpose": "Desktop-инспектор."
+      },
+      {
+        "name": "mobile-inspector",
+        "value": "0 -5px 28px #4c351d24",
+        "purpose": "Нижняя мобильная панель."
+      }
+    ],
+    "motion": [
+      {
+        "name": "photoprint-state",
+        "value": "box-shadow 0.2s, opacity 0.2s, background 0.2s",
+        "purpose": "Состояния карточки; отключается при reduced-motion."
+      },
+      {
+        "name": "button-state",
+        "value": "background 0.18s",
+        "purpose": "Состояние обычной кнопки; отключается при reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1400px"
+      },
+      {
+        "name": "compact",
+        "value": "1100px"
+      },
+      {
+        "name": "icon-navigation",
+        "value": "900px"
+      },
+      {
+        "name": "mobile",
+        "value": "650px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Основная кнопка",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Существующее основное действие; hover сохранён буквально.",
+      "html": "<button class=\"ds-primary\">Добавить</button>",
+      "css": ".ds-primary{min-height:41px;display:inline-flex;align-items:center;justify-content:center;padding:0 17px;border:1px solid transparent;border-radius:6px;background:var(--terra,#315b49);color:#fff9ee;font:500 12px \"Golos Text\",sans-serif;cursor:pointer;transition:background .18s}.ds-primary:hover{background:#502b2b}.ds-primary:focus-visible { outline:2px solid var(--terra,#315b49);outline-offset:4px; }@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    },
+    {
+      "name": "Прозрачная кнопка",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Вспомогательное действие с тонкой границей.",
+      "html": "<button class=\"ds-ghost\">Экспорт</button>",
+      "css": ".ds-ghost{min-height:41px;padding:0 17px;border:1px solid var(--line,#dce0d9);border-radius:6px;background:transparent;color:var(--ink,#292f2d);font:500 12px \"Golos Text\",sans-serif;cursor:pointer;transition:background .18s}.ds-ghost:hover{background:#eee6d8}.ds-ghost:focus-visible { outline:2px solid var(--terra,#315b49);outline-offset:4px; }@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    },
+    {
+      "name": "Поиск",
+      "kind": "input",
+      "refersTo": "search",
+      "description": "Поле поиска из desktop-строки.",
+      "html": "<label class=\"ds-search\"><input aria-label=\"Поиск по семье\" placeholder=\"Найти человека\"></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:10px;border:1px solid #d5cbbb;border-radius:6px;padding:0 11px;height:36px;width:235px;color:var(--muted,#68716c)}.ds-search input{width:100%;min-width:0;border:0;outline:none;background:transparent;font:12px \"Golos Text\",sans-serif;color:var(--ink,#292f2d)}.ds-search input::placeholder{color:#68716c}.ds-search:focus-within{border-color:var(--terra,#315b49)}@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    },
+    {
+      "name": "Навигация",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "Активный пункт в компактной верхней навигации.",
+      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-item ds-active\">Древо</button><button class=\"ds-nav-item\">Семья</button></nav>",
+      "css": ".ds-nav{display:flex;gap:5px}.ds-nav-item{height:36px;padding:0 12px;border:0;border-radius:7px;background:transparent;color:var(--ink,#292f2d);font:12px \"Golos Text\",sans-serif;cursor:pointer}.ds-nav-item.ds-active{color:var(--terra,#315b49);background:#e8eee8}.ds-nav-item:hover{background:#eef1eb}.ds-nav-item:focus-visible { outline:2px solid var(--terra,#315b49);outline-offset:4px; }@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    },
+    {
+      "name": "Фотоотпечаток",
+      "kind": "card",
+      "refersTo": "photoprint",
+      "description": "Карточка без настоящих семейных данных; с нейтральным заполнителем портрета.",
+      "html": "<button class=\"ds-card\"><span class=\"ds-portrait\" aria-hidden=\"true\">А</span><span class=\"ds-copy\"><span class=\"ds-surname\">Фамилия</span><span class=\"ds-name\">Имя</span><span class=\"ds-years\">Годы жизни</span></span></button>",
+      "css": ".ds-card{width:208px;height:264px;padding:12px;display:flex;flex-direction:column;align-items:stretch;gap:12px;text-align:left;border:0;background:#fff;border-radius:12px;box-shadow:0 3px 8px #273b2b0d,0 12px 24px #273b2b09;cursor:pointer;transition:box-shadow .2s,opacity .2s,background .2s}.ds-card:hover{background:#fffefa;box-shadow:0 5px 12px #273b2b15,0 16px 30px #273b2b13}.ds-card.is-selected{outline:2px solid #315b49;outline-offset:3px;background:#fff}.ds-card.is-dimmed{opacity:.38}.ds-portrait{display:grid;place-items:center;width:184px;height:154px;flex-shrink:0;border-radius:5px;background:#edf0e9;color:#8b9489;font:24px Lora,Georgia,serif}.ds-copy{display:flex;flex-direction:column;gap:7px}.ds-surname{font:500 10px/1.2 \"Golos Text\",sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#596b5e}.ds-name{font:400 17px/1.25 Lora,Georgia,serif;color:#293730;overflow-wrap:anywhere}.ds-years{font:10px/1.4 \"Golos Text\",sans-serif;color:#636d66;font-variant-numeric:tabular-nums}.ds-card:focus-visible { outline:2px solid var(--terra,#315b49);outline-offset:4px; }@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    },
+    {
+      "name": "Инспектор",
+      "kind": "custom",
+      "refersTo": "inspector",
+      "description": "Поверхность сведений, показанная отдельно от позиционирования на холсте.",
+      "html": "<section class=\"ds-inspector\"><button class=\"ds-close\" aria-label=\"Закрыть\">×</button><h2>Сведения</h2><p>Семейная история</p></section>",
+      "css": ".ds-inspector{position:relative;width:320px;padding:20px;border:1px solid #dce0d9;border-radius:10px;background:#fffefa;box-shadow:-6px 10px 35px #25392918;color:var(--ink,#292f2d)}.ds-inspector h2{font:400 23px/1.3 Lora,Georgia,serif}.ds-inspector p{font:11px/1.5 \"Golos Text\",sans-serif;color:var(--muted,#68716c)}.ds-close{position:absolute;top:8px;right:8px;background:transparent;border:0;padding:6px;cursor:pointer;color:var(--muted,#68716c)}.ds-close:hover{background:#e8eee8}.ds-close:focus-visible { outline:2px solid var(--terra,#315b49);outline-offset:4px; }@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    },
+    {
+      "name": "Статус брака",
+      "kind": "chip",
+      "refersTo": "marriage-status",
+      "description": "Существующая pill-кнопка редактора в выбранном состоянии.",
+      "html": "<button class=\"ds-status\" aria-pressed=\"true\">Текущий брак</button>",
+      "css": ".ds-status{border:1px solid var(--gold,#aa8b54);border-radius:999px;background:var(--gold,#aa8b54);color:#423110;padding:3px 10px;font:650 10.5px \"Golos Text\",sans-serif;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}.ds-status:hover{border-color:var(--gold,#aa8b54);color:var(--terra,#315b49)}.ds-status:focus-visible { outline:2px solid var(--terra,#315b49);outline-offset:4px; }@media(prefers-reduced-motion:reduce){.ds-primary,.ds-ghost,.ds-card,.ds-status{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Архивные фотоотпечатки",
+    "overview": "Светлый семейный архив: настоящие портреты лежат на почти белых паспарту, имена читаются под фотографией. Светлая бумага, графит и зелёные чернила поддерживают выбранную атмосферу старого фотоальбома. Локальные кириллические Lora и Golos Text связывают личные подписи с тихим рабочим интерфейсом.\n\nДрево занимает доступный экран под компактной навигацией. Плавающие инструменты и сведения о человеке оставляют размер холста постоянным. Материальность создают поля отпечатка и мягкая тень, а не сетка, декоративная текстура или искусственно состаренные портреты.",
+    "keyCharacteristics": [
+      "Светлая бумага без сетки и белые фотоотпечатки.",
+      "Имя под портретом; Lora для личных подписей, Golos Text для управления.",
+      "Полноэкранный холст, свободное панорамирование и плавающий инспектор.",
+      "Прямые связи обходят измеренные границы карточек."
+    ],
+    "rules": [
+      {
+        "name": "Отпечаток",
+        "body": "Портрет располагается над именем внутри белого паспарту; декоративная рамка портрета скрыта.",
+        "section": "typography"
+      },
+      {
+        "name": "Свободный холст",
+        "body": "Инспектор перекрывает холст, сохраняя его размеры и масштаб карточек.",
+        "section": "layout"
+      },
+      {
+        "name": "Безопасный маршрут",
+        "body": "Соединения прокладываются по пустому пространству вокруг измеренных карточек с защитным отступом 16px; выход от граничного порта проходит этот отступ.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "Сохранять размер фотоотпечатка и читаемую начальную ветвь при 100%.",
+      "Строить маршруты по измеренным границам карточек с защитным отступом 16px.",
+      "Открывать сведения поверх холста и сохранять его геометрию.",
+      "Использовать локальные кириллические шрифты, видимый focus и reduced-motion."
+    ],
+    "donts": [
+      "Не возвращать постоянную боковую навигацию, тесную рамку холста или фоновую сетку.",
+      "Не проводить связи через портреты и подписи.",
+      "Не подменять настоящие данные и фотографии декоративными или вымышленными родственниками.",
+      "Не переносить прежний бордовый акцент на новые основные поверхности."
+    ]
+  }
+}

@@ -18,6 +18,7 @@ import {
 } from "./firebase";
 import { formatLifespan, dateSortValue } from "./formatters";
 import {
+  CARD_WIDTH,
   buildCanvasFrame,
   buildFamilyLayout as buildHierarchyLayout,
   DEFAULT_CANVAS_MARGIN,
@@ -29,6 +30,7 @@ import {
   directRelatives,
   relationshipLabel,
 } from "./relations";
+import { buildConnections } from "./routing";
 import "./styles.css";
 import "./canvas-layout.css";
 
@@ -338,30 +340,20 @@ function Portrait({ person, className, botanical = false }) {
 }
 
 function PersonCard({ person, selected, focus, onSelect, register }) {
-  const tilt = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const px = (event.clientX - rect.left) / rect.width - 0.5;
-    const py = (event.clientY - rect.top) / rect.height - 0.5;
-    event.currentTarget.style.setProperty("--tilt-x", (-py * 10).toFixed(2));
-    event.currentTarget.style.setProperty("--tilt-y", (px * 10).toFixed(2));
-  };
-  const resetTilt = (event) => {
-    event.currentTarget.style.setProperty("--tilt-x", 0);
-    event.currentTarget.style.setProperty("--tilt-y", 0);
-  };
   return (
     <button
       className={`person-card ${selected ? "is-selected" : ""} ${focus === "dim" ? "is-dimmed" : ""} ${focus === "on" ? "is-focused" : ""}`}
       onClick={() => onSelect(person.id)}
-      onMouseMove={tilt}
-      onMouseLeave={resetTilt}
       ref={(node) => register(person.id, node)}
       type="button"
       aria-pressed={selected}
     >
       <Portrait person={person} className="avatar" />
       <span className="person-copy">
-        <strong>{person.name}</strong>
+        <strong>
+          <span className="person-surname">{person.name.split(" ")[0]}</span>
+          <span>{person.name.split(" ").slice(1).join(" ")}</span>
+        </strong>
         <span className="person-years">{formatLifespan(person)}</span>
         {(person.maidenName || person.relation) && (
           <small className="person-role">
@@ -381,514 +373,8 @@ function PersonCard({ person, selected, focus, onSelect, register }) {
   );
 }
 
-const CARD_WIDTH = 258;
-const CARD_HEIGHT = 134;
-const PARTNER_CONNECTOR_WIDTH = 42;
-const SIBLING_GAP = 44;
-const MARRIAGE_BRANCH_GAP = 104;
-const ROOT_FAMILY_GAP = 84;
-const STAGE_PADDING = 56;
-const EMPTY_STAGE_HEIGHT = 770;
-const STAGE_TOP = 28;
-const STAGE_BOTTOM = 54;
-const GENERATION_GAP = 190;
-const CONTOUR_GAP = 60;
-const BRANCH_COLORS = [
-  "#5da97e",
-  "#e0865a",
-  "#6ba9d6",
-  "#dcac48",
-  "#b189bd",
-  "#4fb3a8",
-  "#dd8299",
-  "#8b9bdb",
-  "#a7b563",
-  "#c8945f",
-  "#6cb6cf",
-  "#c47b96",
-];
-
-function marriageKey(firstId, secondId) {
-  return [firstId, secondId].filter(Boolean).sort().join("--");
-}
-
-function branchColor(key) {
-  let hash = 0;
-  for (const character of key || "family")
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return BRANCH_COLORS[hash % BRANCH_COLORS.length];
-}
-
-function familyUnitWidth(people) {
-  return (
-    people.length * CARD_WIDTH +
-    Math.max(0, people.length - 1) * PARTNER_CONNECTOR_WIDTH
-  );
-}
-
-function buildFamilyLayout(people) {
-  if (!people.length)
-    return { units: [], cards: [], width: 940, height: EMPTY_STAGE_HEIGHT };
-  const sourceOrder = new Map(
-    people.map((person, index) => [person.id, index]),
-  );
-  const generations = [
-    ...new Set(people.map((person) => person.generation)),
-  ].sort((first, second) => second - first);
-  const highestGeneration = generations[0];
-  const lowestGeneration = generations[generations.length - 1];
-  const units = generations.flatMap((generation) =>
-    groupPartnerUnits(
-      people.filter((person) => person.generation === generation),
-    ).map((members) => ({
-      id: members
-        .map((person) => person.id)
-        .sort()
-        .join("--"),
-      people: members,
-      generation,
-      width: familyUnitWidth(members),
-      order: Math.min(
-        ...members.map((person) => sourceOrder.get(person.id) ?? 0),
-      ),
-      children: [],
-      primaryParentId: null,
-      primaryMarriageKey: "",
-      subtreeWidth: 0,
-      x: 0,
-      y: STAGE_TOP + (highestGeneration - generation) * GENERATION_GAP,
-    })),
-  );
-  const unitById = new Map(units.map((unit) => [unit.id, unit]));
-  const unitByPersonId = new Map();
-  units.forEach((unit) =>
-    unit.people.forEach((person) => unitByPersonId.set(person.id, unit)),
-  );
-
-  units.forEach((unit) => {
-    const candidates = new Map();
-    unit.people.forEach((person, memberIndex) =>
-      person.parents.forEach((parentId) => {
-        const parentUnit = unitByPersonId.get(parentId);
-        if (
-          !parentUnit ||
-          parentUnit.id === unit.id ||
-          parentUnit.generation >= unit.generation
-        )
-          return;
-        const candidate = candidates.get(parentUnit.id) || {
-          count: 0,
-          firstMemberIndex: memberIndex,
-        };
-        candidate.count += 1;
-        candidate.firstMemberIndex = Math.min(
-          candidate.firstMemberIndex,
-          memberIndex,
-        );
-        candidates.set(parentUnit.id, candidate);
-      }),
-    );
-    const [primary] = [...candidates.entries()].sort((first, second) => {
-      if (second[1].count !== first[1].count)
-        return second[1].count - first[1].count;
-      if (first[1].firstMemberIndex !== second[1].firstMemberIndex)
-        return first[1].firstMemberIndex - second[1].firstMemberIndex;
-      const firstUnit = unitById.get(first[0]);
-      const secondUnit = unitById.get(second[0]);
-      if (secondUnit.generation !== firstUnit.generation)
-        return secondUnit.generation - firstUnit.generation;
-      return firstUnit.order - secondUnit.order;
-    });
-    if (primary) {
-      const parentUnit = unitById.get(primary[0]);
-      const parentIds = new Set(parentUnit.people.map((person) => person.id));
-      unit.primaryParentId = primary[0];
-      unit.primaryMarriageKey = unit.people
-        .flatMap((person) =>
-          person.parents.filter((parentId) => parentIds.has(parentId)),
-        )
-        .sort()
-        .join("--");
-      parentUnit.children.push(unit);
-    }
-  });
-
-  // ── Undirected adjacency over units: A—B if someone in A is a parent of someone in B. ──
-  const neighbours = new Map(units.map((unit) => [unit.id, new Set()]));
-  units.forEach((unit) =>
-    unit.people.forEach((person) =>
-      person.parents.forEach((parentId) => {
-        const parentUnit = unitByPersonId.get(parentId);
-        if (parentUnit && parentUnit.id !== unit.id) {
-          neighbours.get(unit.id).add(parentUnit.id);
-          neighbours.get(parentUnit.id).add(unit.id);
-        }
-      }),
-    ),
-  );
-
-  // ── Spanning forest: root each connected component at its oldest (lowest-generation) unit, then
-  // BFS outward. Every neighbour — descendant OR a married-in spouse's own ancestor branch — becomes
-  // a child in the spanning tree, so in-law lineages attach right where they connect instead of being
-  // swept to the far side of the stage. ──
-  const treeChildren = new Map(units.map((unit) => [unit.id, []]));
-  const roots = [];
-  const visited = new Set();
-  units.forEach((start) => {
-    if (visited.has(start.id)) return;
-    const component = [];
-    const stack = [start.id];
-    const localSeen = new Set([start.id]);
-    while (stack.length) {
-      const id = stack.pop();
-      component.push(unitById.get(id));
-      neighbours.get(id).forEach((next) => {
-        if (!localSeen.has(next)) {
-          localSeen.add(next);
-          stack.push(next);
-        }
-      });
-    }
-    const root = component.reduce(
-      (best, unit) =>
-        unit.generation < best.generation ||
-        (unit.generation === best.generation && unit.order < best.order)
-          ? unit
-          : best,
-      component[0],
-    );
-    roots.push(root);
-    const queue = [root.id];
-    visited.add(root.id);
-    while (queue.length) {
-      const id = queue.shift();
-      [...neighbours.get(id)].forEach((next) => {
-        if (!visited.has(next)) {
-          visited.add(next);
-          treeChildren.get(id).push(unitById.get(next));
-          queue.push(next);
-        }
-      });
-    }
-  });
-
-  // order spanning-tree children by where they attach along the parent's card row, then source order
-  const attachIndex = (parent, child) => {
-    const parentIndex = new Map(
-      parent.people.map((person, index) => [person.id, index]),
-    );
-    const indices = [];
-    child.people.forEach((childPerson) =>
-      childPerson.parents.forEach((parentId) => {
-        if (parentIndex.has(parentId)) indices.push(parentIndex.get(parentId));
-      }),
-    );
-    parent.people.forEach((parentPerson, index) =>
-      parentPerson.parents.forEach((parentId) => {
-        if (child.people.some((childPerson) => childPerson.id === parentId))
-          indices.push(index);
-      }),
-    );
-    return indices.length
-      ? indices.reduce((sum, value) => sum + value, 0) / indices.length
-      : parent.people.length / 2;
-  };
-  units.forEach((parent) =>
-    treeChildren
-      .get(parent.id)
-      .sort(
-        (first, second) =>
-          attachIndex(parent, first) - attachIndex(parent, second) ||
-          first.order - second.order,
-      ),
-  );
-
-  // ── Contour packing (Reingold–Tilford, keyed by generation-row so branches that share no row stack
-  // vertically instead of spreading sideways). layoutSubtree returns x-offsets (root at 0) plus
-  // left/right contour maps (generation → extreme edge x). ──
-  const shiftContour = (contour, delta) => {
-    const shifted = new Map();
-    contour.forEach((value, generation) =>
-      shifted.set(generation, value + delta),
-    );
-    return shifted;
-  };
-  const layoutSubtree = (unit) => {
-    const half = unit.width / 2;
-    const kids = treeChildren.get(unit.id);
-    if (!kids.length) {
-      return {
-        offsets: new Map([[unit.id, 0]]),
-        left: new Map([[unit.generation, -half]]),
-        right: new Map([[unit.generation, half]]),
-      };
-    }
-    const offsets = new Map();
-    const accLeft = new Map();
-    const accRight = new Map();
-    const kidRootX = [];
-    const kidAttachOffset = [];
-    const kidSpan = [];
-    kids.forEach((kid, index) => {
-      const sub = layoutSubtree(kid);
-      let shift = 0;
-      if (index > 0) {
-        let need = -Infinity;
-        sub.left.forEach((leftEdge, generation) => {
-          if (accRight.has(generation))
-            need = Math.max(
-              need,
-              accRight.get(generation) + CONTOUR_GAP - leftEdge,
-            );
-        });
-        shift = need === -Infinity ? 0 : Math.max(0, need);
-      }
-      sub.offsets.forEach((x, id) => offsets.set(id, x + shift));
-      shiftContour(sub.left, shift).forEach((value, generation) => {
-        if (!accLeft.has(generation) || value < accLeft.get(generation))
-          accLeft.set(generation, value);
-      });
-      shiftContour(sub.right, shift).forEach((value, generation) => {
-        if (!accRight.has(generation) || value > accRight.get(generation))
-          accRight.set(generation, value);
-      });
-      kidRootX.push(shift);
-      kidAttachOffset.push(
-        attachIndex(unit, kid) * (CARD_WIDTH + PARTNER_CONNECTOR_WIDTH) +
-          CARD_WIDTH / 2 -
-          unit.width / 2,
-      );
-      kidSpan.push(
-        Math.max(...sub.right.values()) - Math.min(...sub.left.values()),
-      );
-    });
-    // Plain couple: centre over its outer children. Multi-marriage unit: align its largest child
-    // branch under the exact card it attaches to, so that spouse stays beside their own line while
-    // distant marriages just get longer connectors.
-    let parentX;
-    if (unit.people.length >= 3) {
-      let primary = 0;
-      for (let index = 1; index < kids.length; index += 1)
-        if (kidSpan[index] > kidSpan[primary]) primary = index;
-      parentX = kidRootX[primary] - kidAttachOffset[primary];
-    } else {
-      parentX = (kidRootX[0] + kidRootX[kidRootX.length - 1]) / 2;
-    }
-    const finalOffsets = new Map();
-    offsets.forEach((x, id) => finalOffsets.set(id, x - parentX));
-    finalOffsets.set(unit.id, 0);
-    const left = shiftContour(accLeft, -parentX);
-    const right = shiftContour(accRight, -parentX);
-    left.set(
-      unit.generation,
-      Math.min(
-        left.has(unit.generation) ? left.get(unit.generation) : Infinity,
-        -half,
-      ),
-    );
-    right.set(
-      unit.generation,
-      Math.max(
-        right.has(unit.generation) ? right.get(unit.generation) : -Infinity,
-        half,
-      ),
-    );
-    return { offsets: finalOffsets, left, right };
-  };
-
-  // place root subtrees left-to-right, contour-packed against each other (unit.x is CENTRE here)
-  const cursorRight = new Map();
-  roots.forEach((root, index) => {
-    const sub = layoutSubtree(root);
-    let base = STAGE_PADDING - Math.min(...sub.left.values());
-    if (index > 0) {
-      let need = -Infinity;
-      sub.left.forEach((leftEdge, generation) => {
-        if (cursorRight.has(generation))
-          need = Math.max(
-            need,
-            cursorRight.get(generation) + ROOT_FAMILY_GAP - (base + leftEdge),
-          );
-      });
-      if (need !== -Infinity && need > 0) base += need;
-    }
-    sub.offsets.forEach((x, id) => {
-      unitById.get(id).x = base + x;
-    });
-    sub.right.forEach((value, generation) => {
-      const absolute = base + value;
-      if (
-        !cursorRight.has(generation) ||
-        absolute > cursorRight.get(generation)
-      )
-        cursorRight.set(generation, absolute);
-    });
-  });
-
-  // convert centre → left edge for the renderer
-  units.forEach((unit) => {
-    unit.x -= unit.width / 2;
-  });
-
-  // ── Spread the spouse chain: give each spouse card a variable gap so it sits over the branches
-  // that attach to that person (their own children, and a married-in spouse's own parents), instead
-  // of sliding the whole unit off-centre. Partners who share all their children stay snug. ──
-  const STEP = CARD_WIDTH + PARTNER_CONNECTOR_WIDTH;
-  units.forEach((unit) => {
-    const count = unit.people.length;
-    unit.gaps = new Array(Math.max(0, count - 1)).fill(PARTNER_CONNECTOR_WIDTH);
-    if (count < 2) return;
-    const kids = treeChildren.get(unit.id);
-    if (!kids.length) return;
-    const targets = unit.people.map((person) => {
-      const centres = [];
-      kids.forEach((child) => {
-        const attaches =
-          child.people.some((childPerson) =>
-            childPerson.parents.includes(person.id),
-          ) ||
-          person.parents.some((parentId) =>
-            child.people.some((childPerson) => childPerson.id === parentId),
-          );
-        if (attaches) centres.push(child.x + child.width / 2);
-      });
-      return centres.length
-        ? centres.reduce((sum, value) => sum + value, 0) / centres.length
-        : null;
-    });
-    if (targets.every((target) => target === null)) return;
-    const left = unit.people.map((_person, index) =>
-      targets[index] != null
-        ? targets[index] - CARD_WIDTH / 2
-        : unit.x + index * STEP,
-    );
-    for (let index = 1; index < count; index += 1)
-      left[index] = Math.max(left[index], left[index - 1] + STEP);
-    for (let index = count - 2; index >= 0; index -= 1)
-      if (targets[index] == null)
-        left[index] = Math.min(left[index], left[index + 1] - STEP);
-    const minLeft = Math.min(...left);
-    unit.x = minLeft;
-    unit.width = Math.max(...left) + CARD_WIDTH - minLeft;
-    for (let index = 1; index < count; index += 1)
-      unit.gaps[index - 1] = left[index] - (left[index - 1] + CARD_WIDTH);
-  });
-
-  // ── Resolve residual same-generation overlaps (fires only where a unit and one of its spanning
-  // ancestors/in-laws share a row, e.g. both spouses have parents) by shifting whole subtrees. ──
-  const subtreeOf = new Map();
-  const computeSubtree = (unit) => {
-    if (subtreeOf.has(unit.id)) return subtreeOf.get(unit.id);
-    const set = new Set([unit.id]);
-    treeChildren
-      .get(unit.id)
-      .forEach((child) => computeSubtree(child).forEach((id) => set.add(id)));
-    subtreeOf.set(unit.id, set);
-    return set;
-  };
-  units.forEach(computeSubtree);
-  const shiftSubtree = (unit, delta) =>
-    subtreeOf.get(unit.id).forEach((id) => {
-      unitById.get(id).x += delta;
-    });
-  for (let iteration = 0; iteration < 12; iteration += 1) {
-    let moved = false;
-    const byGeneration = new Map();
-    units.forEach((unit) => {
-      if (!byGeneration.has(unit.generation))
-        byGeneration.set(unit.generation, []);
-      byGeneration.get(unit.generation).push(unit);
-    });
-    for (const row of byGeneration.values()) {
-      row.sort((first, second) => first.x - second.x);
-      for (let index = 0; index < row.length - 1; index += 1) {
-        const left = row[index];
-        const right = row[index + 1];
-        const gap = left.x + left.width + CONTOUR_GAP - right.x;
-        if (gap > 0.5) {
-          if (subtreeOf.get(right.id).has(left.id)) shiftSubtree(left, -gap);
-          else shiftSubtree(right, gap);
-          moved = true;
-        }
-      }
-    }
-    if (!moved) break;
-  }
-
-  // normalise to stage padding
-  let minX = Infinity;
-  units.forEach((unit) => {
-    if (unit.x < minX) minX = unit.x;
-  });
-  if (Number.isFinite(minX)) {
-    const shift = STAGE_PADDING - minX;
-    units.forEach((unit) => {
-      unit.x += shift;
-    });
-  }
-  // Cards are laid out as a family only for the initial automatic arrangement. Every person gets
-  // their own final coordinates so partners can later be moved independently.
-  const cards = [];
-  units.forEach((unit) => {
-    const gaps = unit.gaps || [];
-    const cardLeft = (index) =>
-      index * CARD_WIDTH +
-      gaps.slice(0, index).reduce((sum, value) => sum + value, 0);
-    const manualGroups = new Map();
-    unit.people.forEach((person) => {
-      if (!Number.isFinite(person.manualX) || !Number.isFinite(person.manualY))
-        return;
-      const key = `${person.manualX}:${person.manualY}`;
-      if (!manualGroups.has(key)) manualGroups.set(key, []);
-      manualGroups.get(key).push(person.id);
-    });
-    // The previous drag implementation stored the same top-left coordinate on every spouse.
-    // Interpret exact duplicates as that legacy family position so existing saved trees do not
-    // suddenly stack all spouses on top of one another after this upgrade.
-    const legacyPositions = new Map();
-    manualGroups.forEach((ids) => {
-      if (ids.length < 2) return;
-      const source = unit.people.find((person) => person.id === ids[0]);
-      ids.forEach((id) => {
-        const index = unit.people.findIndex((person) => person.id === id);
-        legacyPositions.set(id, {
-          x: source.manualX + cardLeft(index),
-          y: source.manualY,
-        });
-      });
-    });
-    unit.people.forEach((person, index) => {
-      const legacy = legacyPositions.get(person.id);
-      const hasManualPosition =
-        Number.isFinite(person.manualX) && Number.isFinite(person.manualY);
-      cards.push({
-        person,
-        x:
-          legacy?.x ??
-          (hasManualPosition ? person.manualX : unit.x + cardLeft(index)),
-        y: legacy?.y ?? (hasManualPosition ? person.manualY : unit.y),
-      });
-    });
-  });
-
-  let autoHeight =
-    STAGE_TOP +
-    (highestGeneration - lowestGeneration) * GENERATION_GAP +
-    CARD_HEIGHT +
-    STAGE_BOTTOM;
-  let width = 0;
-  let heightFromUnits = 0;
-  cards.forEach((card) => {
-    if (card.x + CARD_WIDTH > width) width = card.x + CARD_WIDTH;
-    if (card.y + CARD_HEIGHT > heightFromUnits)
-      heightFromUnits = card.y + CARD_HEIGHT;
-  });
-  return {
-    units,
-    cards,
-    width: Math.max(940, width + STAGE_PADDING),
-    height: Math.max(300, autoHeight, heightFromUnits + STAGE_BOTTOM),
-  };
+function branchColor() {
+  return "#748078";
 }
 
 function generationLabel(generation) {
@@ -1624,191 +1110,20 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
       const stageNode = stage.current;
       if (!stageNode) return;
       const base = stageNode.getBoundingClientRect();
-      const peopleById = new Map(people.map((person) => [person.id, person]));
-      const box = (id) => {
-        const rect = nodes.current.get(id)?.getBoundingClientRect();
-        if (!rect) return null;
-        return {
-          left: (rect.left - base.left) / scale,
-          right: (rect.right - base.left) / scale,
-          top: (rect.top - base.top) / scale,
-          bottom: (rect.bottom - base.top) / scale,
-          centerX: (rect.left - base.left + rect.width / 2) / scale,
-          centerY: (rect.top - base.top + rect.height / 2) / scale,
-        };
-      };
-      const point = (id, side) => {
-        const rect = box(id);
-        if (!rect) return null;
-        return {
-          x: rect.centerX,
-          y:
-            side === "top"
-              ? rect.top
-              : side === "center"
-                ? rect.centerY
-                : rect.bottom,
-        };
-      };
-      const parentOrigin = (parentIds, childrenBelow) => {
-        if (parentIds.length === 1)
-          return point(parentIds[0], childrenBelow ? "bottom" : "top");
-        const parentPoints = parentIds
-          .map((parentId) => point(parentId, "center"))
-          .filter(Boolean);
-        if (!parentPoints.length) return null;
-        return {
-          x:
-            parentPoints.reduce((sum, item) => sum + item.x, 0) /
-            parentPoints.length,
-          y:
-            parentPoints.reduce((sum, item) => sum + item.y, 0) /
-            parentPoints.length,
-        };
-      };
-      const families = new Map();
-      people.forEach((child) => {
-        const parentIds = child.parents
-          .filter((id) => nodes.current.has(id))
-          .sort();
-        if (!parentIds.length) return;
-        const key = parentIds.join("--");
-        if (!families.has(key)) families.set(key, { parentIds, children: [] });
-        families.get(key).children.push(child.id);
-      });
-      const routes = [];
-      families.forEach(({ parentIds, children }, familyId) => {
-        const parentBoxes = parentIds.map(box).filter(Boolean);
-        const childBoxes = children.map(box).filter(Boolean);
-        const childrenBelow =
-          childBoxes.reduce((sum, rect) => sum + rect.centerY, 0) /
-            Math.max(1, childBoxes.length) >
-          parentBoxes.reduce((sum, rect) => sum + rect.centerY, 0) /
-            Math.max(1, parentBoxes.length);
-        const childPoints = children
-          .map((childId) => point(childId, childrenBelow ? "top" : "bottom"))
-          .filter(Boolean)
-          .sort((first, second) => first.x - second.x);
-        const from = parentOrigin(parentIds, childrenBelow);
-        if (!from || !childPoints.length) return;
-        const nearestChildY = Math.min(...childPoints.map((item) => item.y));
-        const firstChildX = childPoints[0].x;
-        const lastChildX = childPoints[childPoints.length - 1].x;
-        const safeReach = (GENERATION_GAP - CARD_HEIGHT) / 2;
-        routes.push({
-          id: familyId,
-          parentIds,
-          childIds: children,
-          childPoints,
-          from,
-          firstChildX,
-          lastChildX,
-          baseJunctionY: from.y + (nearestChildY - from.y) * 0.55,
-          minY: Math.min(from.y, nearestChildY) + 16,
-          maxY: Math.max(from.y, nearestChildY) - 16,
-          left: Math.min(firstChildX, from.x),
-          right: Math.max(lastChildX, from.x),
-          lane: 0,
-        });
-      });
-      const orderedRoutes = routes
-        .slice()
-        .sort(
-          (first, second) =>
-            first.left - second.left || first.from.x - second.from.x,
-        );
-      orderedRoutes.forEach((route, routeIndex) => {
-        const usedLanes = new Set();
-        orderedRoutes.slice(0, routeIndex).forEach((previous) => {
-          const sameLevel =
-            Math.abs(previous.baseJunctionY - route.baseJunctionY) < 8;
-          const overlaps =
-            Math.min(previous.right, route.right) -
-              Math.max(previous.left, route.left) >
-            -8;
-          const sharesParent = previous.parentIds.some((parentId) =>
-            route.parentIds.includes(parentId),
-          );
-          if (sameLevel && (overlaps || sharesParent))
-            usedLanes.add(previous.lane);
-        });
-        while (usedLanes.has(route.lane)) route.lane += 1;
-      });
-      const laneOffset = (lane) => -8 - lane * 24;
-      const next = orderedRoutes.map((route) => {
-        const { id, childPoints, from, firstChildX, lastChildX } = route;
-        const junctionY = Math.max(
-          route.minY,
-          Math.min(route.maxY, route.baseJunctionY + laneOffset(route.lane)),
-        );
-        const segments = [`M ${from.x} ${from.y} V ${junctionY}`];
-        if (childPoints.length > 1)
-          segments.push(
-            `M ${Math.min(firstChildX, from.x)} ${junctionY} H ${Math.max(lastChildX, from.x)}`,
-          );
-        childPoints.forEach((childPoint) =>
-          segments.push(`M ${childPoint.x} ${junctionY} V ${childPoint.y}`),
-        );
-        if (childPoints.length === 1 && firstChildX !== from.x)
-          segments.push(`M ${from.x} ${junctionY} H ${firstChildX}`);
-        const distant = route.right - route.left > CARD_WIDTH * 4.5;
-        return {
-          id,
-          d: segments.join(" "),
-          color: branchColor(id),
-          nodeX: from.x,
-          nodeY: junctionY,
-          parentIds: route.parentIds,
-          childIds: route.childIds,
-          distant,
-        };
-      });
-      setPaths(next);
-
-      const seenMarriages = new Set();
-      const nextMarriages = [];
-      people.forEach((person) =>
-        person.partnerIds.forEach((partnerId) => {
-          const id = marriageKey(person.id, partnerId);
-          if (seenMarriages.has(id)) return;
-          seenMarriages.add(id);
-          const partner = peopleById.get(partnerId);
-          const first = box(person.id);
-          const second = box(partnerId);
-          if (!partner || !first || !second) return;
-          const dx = second.centerX - first.centerX;
-          const dy = second.centerY - first.centerY;
-          let from;
-          let to;
-          let d;
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            from = { x: dx >= 0 ? first.right : first.left, y: first.centerY };
-            to = { x: dx >= 0 ? second.left : second.right, y: second.centerY };
-            const midX = (from.x + to.x) / 2;
-            d = `M ${from.x} ${from.y} H ${midX} V ${to.y} H ${to.x}`;
-          } else {
-            from = { x: first.centerX, y: dy >= 0 ? first.bottom : first.top };
-            to = { x: second.centerX, y: dy >= 0 ? second.top : second.bottom };
-            const midY = (from.y + to.y) / 2;
-            d = `M ${from.x} ${from.y} V ${midY} H ${to.x} V ${to.y}`;
-          }
-          nextMarriages.push({
-            id,
-            d,
-            color: branchColor(id),
-            nodeX: (from.x + to.x) / 2,
-            nodeY: (from.y + to.y) / 2,
-            current:
-              person.currentPartnerId === partnerId ||
-              partner.currentPartnerId === person.id,
-            former:
-              person.formerPartnerIds.includes(partnerId) ||
-              partner.formerPartnerIds.includes(person.id),
-            people: [person.id, partnerId],
+      const bounds = new Map();
+      people.forEach((person) => {
+        const rect = nodes.current.get(person.id)?.getBoundingClientRect();
+        if (rect)
+          bounds.set(person.id, {
+            left: (rect.left - base.left) / scale,
+            right: (rect.right - base.left) / scale,
+            top: (rect.top - base.top) / scale,
+            bottom: (rect.bottom - base.top) / scale,
           });
-        }),
-      );
-      setMarriages(nextMarriages);
+      });
+      const result = buildConnections(people, bounds);
+      setPaths(result.paths);
+      setMarriages(result.marriages);
     };
     const frame = requestAnimationFrame(draw);
     const observer = new ResizeObserver(draw);
@@ -1838,8 +1153,6 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
             style={{ "--branch-color": marriage.color }}
           >
             <path d={marriage.d} className="marriage-line" />
-            <circle cx={marriage.nodeX - 4} cy={marriage.nodeY} r="4.5" />
-            <circle cx={marriage.nodeX + 4} cy={marriage.nodeY} r="4.5" />
           </g>
         );
       })}
@@ -1862,12 +1175,6 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
             style={{ "--branch-color": path.color }}
           >
             <path d={path.d} className="parent-line" />
-            <circle
-              className="branch-node"
-              cx={path.nodeX}
-              cy={path.nodeY}
-              r="5"
-            />
           </g>
         );
       })}
@@ -2083,7 +1390,12 @@ function App() {
       ? visiblePeople
       : visiblePeople.map((p) => ({ ...p, manualPositionVersion: 0 })),
   );
-  const canvasFrame = buildCanvasFrame(familyLayout, DEFAULT_CANVAS_MARGIN);
+  const canvasFrame = buildCanvasFrame(
+    familyLayout,
+    DEFAULT_CANVAS_MARGIN,
+    140 / scale,
+    70 / scale,
+  );
   const canvasOffsetX = canvasFrame.offsetX;
   const canvasOffsetY = canvasFrame.offsetY;
   const stageWidth = canvasFrame.width;
@@ -2126,9 +1438,14 @@ function App() {
   const centerTree = (behavior = "smooth") => {
     const board = boardRef.current;
     if (!board) return;
+    const rootCard = familyLayout.cards.find(
+      (card) => card.person.id === branchRoot?.id,
+    );
     const contentCenterX =
       canvasOffsetX +
-      (familyLayout.contentLeft + familyLayout.contentRight) / 2;
+      (treeScope === "branch" && board.clientWidth < 650 && rootCard
+        ? rootCard.x + CARD_WIDTH / 2
+        : (familyLayout.contentLeft + familyLayout.contentRight) / 2);
     const contentTop = canvasOffsetY + familyLayout.contentTop;
     board.scrollTo({
       left: Math.max(0, contentCenterX * scale - board.clientWidth / 2),
@@ -2136,7 +1453,7 @@ function App() {
         0,
         contentTop * scale -
           Math.max(
-            140,
+            108,
             (board.clientHeight - familyLayout.contentHeight * scale) / 2,
           ),
       ),
@@ -2173,12 +1490,7 @@ function App() {
       const fittedScale = treeScale();
       if (fittedScale != null)
         setScale(
-          treeScope === "branch"
-            ? Math.max(
-                window.matchMedia("(max-width: 650px)").matches ? 0.85 : 0.9,
-                fittedScale,
-              )
-            : fittedScale,
+          treeScope === "branch" ? Math.max(1, fittedScale) : fittedScale,
         );
     });
     return () => cancelAnimationFrame(frame);
@@ -2243,7 +1555,7 @@ function App() {
         setScale(
           window.matchMedia("(max-width: 650px)").matches &&
             treeScope === "branch"
-            ? Math.max(0.65, fitted)
+            ? Math.max(1, fitted)
             : fitted,
         );
       requestAnimationFrame(() => centerTree("auto"));
