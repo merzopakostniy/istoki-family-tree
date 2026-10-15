@@ -313,7 +313,7 @@ function BotanicalPortraitFrame() {
   );
 }
 
-function Portrait({ person, className, botanical = false }) {
+function Portrait({ person, className, botanical = false, crop = false }) {
   return (
     <span
       className={`${className} ${botanical ? "has-botanical-frame" : ""}`}
@@ -326,8 +326,9 @@ function Portrait({ person, className, botanical = false }) {
             src={person.photo}
             alt=""
             style={{
-              objectPosition: `${person.photoX ?? 50}% ${person.photoY ?? 50}%`,
-              transform: `scale(${person.photoScale ?? 1})`,
+              objectFit: crop ? "cover" : "contain",
+              objectPosition: crop ? `${person.photoX ?? 50}% ${person.photoY ?? 50}%` : "center",
+              transform: crop ? `scale(${person.photoScale ?? 1})` : "none",
             }}
           />
         ) : (
@@ -784,6 +785,7 @@ function PersonEditor({ person, people, onSave, onClose }) {
           <Portrait
             person={{ ...form, name: form.name || "Фото" }}
             className="editor-photo-preview"
+            crop
           />
           <div className="photo-editor-body">
             <strong>Фотография</strong>
@@ -2209,7 +2211,8 @@ function App() {
                         src={person.photo}
                         alt={person.name}
                         style={{
-                          objectPosition: `${person.photoX}% ${person.photoY}%`,
+                          objectFit: "contain",
+                          objectPosition: "center",
                         }}
                         loading="lazy"
                       />
