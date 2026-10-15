@@ -30,12 +30,20 @@ import {
   relationshipLabel,
 } from "./relations";
 import "./styles.css";
+import "./canvas-layout.css";
 
 const STORAGE_KEY = "istoki-family-tree-v2";
 const FIT_PADDING = 38;
 
 function Icon({ name, size = 20 }) {
   const paths = {
+    menu: (
+      <>
+        <circle cx="5" cy="12" r="1" />
+        <circle cx="12" cy="12" r="1" />
+        <circle cx="19" cy="12" r="1" />
+      </>
+    ),
     photo: (
       <>
         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -1265,7 +1273,13 @@ function PersonEditor({ person, people, onSave, onClose }) {
       role="presentation"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <form className="editor" role="dialog" aria-modal="true" aria-label={isNew ? "Добавить человека" : "Редактировать запись"} onSubmit={submit}>
+      <form
+        className="editor"
+        role="dialog"
+        aria-modal="true"
+        aria-label={isNew ? "Добавить человека" : "Редактировать запись"}
+        onSubmit={submit}
+      >
         <div className="editor-header">
           <div>
             <h2>{isNew ? "Добавить человека" : "Редактировать запись"}</h2>
@@ -1637,7 +1651,8 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
         };
       };
       const parentOrigin = (parentIds, childrenBelow) => {
-        if (parentIds.length === 1) return point(parentIds[0], childrenBelow ? "bottom" : "top");
+        if (parentIds.length === 1)
+          return point(parentIds[0], childrenBelow ? "bottom" : "top");
         const parentPoints = parentIds
           .map((parentId) => point(parentId, "center"))
           .filter(Boolean);
@@ -1665,7 +1680,11 @@ function TreeConnections({ people, nodes, stage, scale, selectedId }) {
       families.forEach(({ parentIds, children }, familyId) => {
         const parentBoxes = parentIds.map(box).filter(Boolean);
         const childBoxes = children.map(box).filter(Boolean);
-        const childrenBelow = childBoxes.reduce((sum, rect) => sum + rect.centerY, 0) / Math.max(1, childBoxes.length) > parentBoxes.reduce((sum, rect) => sum + rect.centerY, 0) / Math.max(1, parentBoxes.length);
+        const childrenBelow =
+          childBoxes.reduce((sum, rect) => sum + rect.centerY, 0) /
+            Math.max(1, childBoxes.length) >
+          parentBoxes.reduce((sum, rect) => sum + rect.centerY, 0) /
+            Math.max(1, parentBoxes.length);
         const childPoints = children
           .map((childId) => point(childId, childrenBelow ? "top" : "bottom"))
           .filter(Boolean)
@@ -1885,6 +1904,8 @@ function App() {
   const [generationFilter, setGenerationFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const panRef = useRef(null);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const stageRef = useRef(null);
@@ -2111,7 +2132,14 @@ function App() {
     const contentTop = canvasOffsetY + familyLayout.contentTop;
     board.scrollTo({
       left: Math.max(0, contentCenterX * scale - board.clientWidth / 2),
-      top: Math.max(0, contentTop * scale - 110),
+      top: Math.max(
+        0,
+        contentTop * scale -
+          Math.max(
+            140,
+            (board.clientHeight - familyLayout.contentHeight * scale) / 2,
+          ),
+      ),
       behavior,
     });
   };
@@ -2135,7 +2163,7 @@ function App() {
   const didAutoFit = useRef(false);
   useEffect(() => {
     didAutoFit.current = false;
-  }, [treeScope, rootId, query, generationFilter, manualLayout, selectedId]);
+  }, [treeScope, rootId, query, generationFilter, manualLayout]);
   useEffect(() => {
     if (!people.length || didAutoFit.current) return;
     const board = boardRef.current;
@@ -2145,9 +2173,11 @@ function App() {
       const fittedScale = treeScale();
       if (fittedScale != null)
         setScale(
-          window.matchMedia("(max-width: 650px)").matches &&
-            treeScope === "branch"
-            ? Math.max(0.65, fittedScale)
+          treeScope === "branch"
+            ? Math.max(
+                window.matchMedia("(max-width: 650px)").matches ? 0.85 : 0.9,
+                fittedScale,
+              )
             : fittedScale,
         );
     });
@@ -2161,7 +2191,7 @@ function App() {
     query,
     generationFilter,
     manualLayout,
-    selectedId,
+    view,
   ]);
   useEffect(() => {
     setSheetExpanded(false);
@@ -2169,6 +2199,7 @@ function App() {
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === "Escape") {
+        setMenuOpen(false);
         setSelectedId(null);
         setEditor(false);
         setHelpOpen(false);
@@ -2208,7 +2239,13 @@ function App() {
   useEffect(() => {
     const handleResize = () => {
       const fitted = treeScale();
-      if (fitted != null) setScale(window.matchMedia("(max-width: 650px)").matches && treeScope === "branch" ? Math.max(.65, fitted) : fitted);
+      if (fitted != null)
+        setScale(
+          window.matchMedia("(max-width: 650px)").matches &&
+            treeScope === "branch"
+            ? Math.max(0.65, fitted)
+            : fitted,
+        );
       requestAnimationFrame(() => centerTree("auto"));
     };
     window.addEventListener("resize", handleResize);
@@ -2237,8 +2274,19 @@ function App() {
         cardRect.left +
         cardRect.width / 2 -
         boardRect.left -
-        board.clientWidth / 2;
-      board.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+        (board.clientWidth -
+          (window.matchMedia("(min-width: 901px)").matches ? 340 : 0)) /
+          2;
+      const top =
+        board.scrollTop +
+        cardRect.top -
+        boardRect.top -
+        Math.max(140, (board.clientHeight - cardRect.height) / 2);
+      board.scrollTo({
+        left: Math.max(0, left),
+        top: Math.max(0, top),
+        behavior: "smooth",
+      });
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedId]);
@@ -2345,100 +2393,44 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <a
-          className="brand"
-          href="#tree"
-          onClick={() => setView("tree")}
-          aria-label="Истоки — семейное древо"
-        >
-          <span className="tree-rings" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>
-            Истоки<small>Семейный архив</small>
-          </span>
-        </a>
-        <div className="sidebar-family">
-          <span className="family-monogram">И</span>
-          <div>
-            <strong>Моя семья</strong>
-            <small>История, которая нас связывает</small>
-          </div>
-        </div>
-        <nav aria-label="Основная навигация">
-          {[
-            ["tree", "tree", "Семейное древо"],
-            ["family", "users", "Все родственники"],
-            ["photos", "photo", "Фотоальбом"],
-          ].map(([id, icon, label]) => (
-            <button
-              key={id}
-              aria-label={label}
-              className={`nav-item ${view === id ? "active" : ""}`}
-              onClick={() => {
-                setView(id);
-                setGenerationFilter("all");
-              }}
-              aria-current={view === id ? "page" : undefined}
-            >
-              <Icon name={icon} />
-              <span>{label}</span>
-              {id === "family" && <small>{people.length}</small>}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="archive-note">
-            <Icon name="book" size={26} />
-            <p>
-              Сохраняем имена.
-              <br />
-              <em>Продолжаем историю.</em>
-            </p>
-            <span>Для тех, кто будет после нас.</span>
-          </div>
-          <button
-            className="nav-item utility"
-            onClick={() => setHelpOpen(true)}
-          >
-            <Icon name="help" />
-            <span>Как устроено древо</span>
-          </button>
-          <button className="owner-button" onClick={handleOwnerAccess}>
-            <span className="owner-avatar">
-              <Icon name="user" />
-            </span>
-            <span>
-              <strong>
-                {ownerSignedIn ? "Хранитель истории" : "Войти в архив"}
-              </strong>
-              <small>
-                {ownerSignedIn
-                  ? "Режим владельца · выйти"
-                  : "Редактирование для владельца"}
-              </small>
-            </span>
-            <Icon name="chevron" size={16} />
-          </button>
-        </div>
-      </aside>
       <div className="main-shell">
         <header className="topbar">
-          <div className="breadcrumb">
-            <span>Моя семья</span>
-            <Icon name="chevron" size={13} />
-            <strong>
-              {view === "tree"
-                ? "Семейное древо"
-                : view === "family"
-                  ? "Все родственники"
-                  : "Фотоальбом"}
-            </strong>
-          </div>
+          <a
+            className="brand"
+            href="#tree"
+            onClick={() => setView("tree")}
+            aria-label="Истоки — семейное древо"
+          >
+            <span className="tree-rings" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+            <span>Истоки</span>
+          </a>
+          <nav aria-label="Основная навигация">
+            {[
+              ["tree", "tree", "Древо"],
+              ["family", "users", "Родственники"],
+              ["photos", "photo", "Фотоальбом"],
+            ].map(([id, icon, label]) => (
+              <button
+                key={id}
+                aria-label={label}
+                className={`nav-item ${view === id ? "active" : ""}`}
+                onClick={() => {
+                  setView(id);
+                  setGenerationFilter("all");
+                  setMenuOpen(false);
+                }}
+                aria-current={view === id ? "page" : undefined}
+              >
+                <Icon name={icon} size={18} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
           <div className="header-actions">
             <label className="search-field">
               <Icon name="search" size={18} />
@@ -2471,76 +2463,80 @@ function App() {
               <Icon name="plus" size={18} />
               <span>Добавить человека</span>
             </button>
+            <button
+              className="icon-button archive-menu-toggle"
+              aria-label="Меню архива"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <Icon name="menu" size={20} />
+            </button>
+            {menuOpen && (
+              <div className="archive-menu">
+                <span
+                  className={`sync-state ${cloudState === "error" ? "offline" : ""}`}
+                >
+                  <i />
+                  {cloudState === "loading"
+                    ? "Подключаем архив"
+                    : cloudState === "error"
+                      ? "Нет связи с архивом"
+                      : "Архив синхронизирован"}
+                </span>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleOwnerAccess();
+                  }}
+                >
+                  <Icon name="user" size={17} />
+                  {ownerSignedIn
+                    ? "Выйти из режима владельца"
+                    : "Войти владельцу"}
+                </button>
+                <button
+                  onClick={() => {
+                    exportArchive();
+                    setMenuOpen(false);
+                  }}
+                  disabled={!people.length}
+                >
+                  <Icon name="download" size={17} />
+                  Сохранить архив
+                </button>
+                <button
+                  onClick={() => {
+                    setHelpOpen(true);
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Icon name="help" size={17} />
+                  Как устроено древо
+                </button>
+              </div>
+            )}
           </div>
         </header>
-        <div className="page-intro">
-          <div>
-            <h1>
-              {view === "tree"
-                ? "Семейное древо"
-                : view === "family"
-                  ? "Близкие. Через поколения."
-                  : "Лица нашей истории"}
-            </h1>
-            <p>
-              {view === "tree"
-                ? "Каждое имя — часть вашей истории."
-                : view === "family"
-                  ? "Все, кто делает вашу семью семьёй."
-                  : "Снимки, в которых живёт память о родных."}
-            </p>
-          </div>
-          <div className="intro-actions">
-            <span
-              className={`sync-state ${cloudState === "error" ? "offline" : ""}`}
-            >
-              <i />
-              {cloudState === "loading"
-                ? "Подключаем архив"
-                : cloudState === "error"
-                  ? "Нет связи с архивом"
-                  : "Общее семейное древо"}
-            </span>
-            <button
-              className="export-button"
-              aria-label="Сохранить архив"
-              onClick={exportArchive}
-              disabled={!people.length}
-            >
-              <Icon name="download" size={16} />
-              <span>Сохранить архив</span>
-            </button>
-          </div>
-        </div>
-        <main id="tree" className="workspace">
+        <main id="tree" className={`workspace workspace-${view}`}>
+          <h1 className="visually-hidden">
+            {view === "tree"
+              ? "Семейное древо"
+              : view === "family"
+                ? "Родственники"
+                : "Фотоальбом"}
+          </h1>
           <section
             className={`tree-area ${selected ? "has-detail" : ""}`}
             aria-label="Семейный архив"
           >
             <div className="canvas-heading">
-              <div className="view-switch" aria-label="Вид архива">
-                <button
-                  className={view === "tree" ? "active" : ""}
-                  onClick={() => setView("tree")}
-                >
-                  <Icon name="tree" size={16} />
-                  Древо
-                </button>
-                <button
-                  className={view === "family" ? "active" : ""}
-                  onClick={() => setView("family")}
-                >
-                  <Icon name="list" size={16} />
-                  Список
-                </button>
-                <button
-                  className={view === "photos" ? "active" : ""}
-                  onClick={() => setView("photos")}
-                >
-                  <Icon name="photo" size={16} />
-                  Фото
-                </button>
-              </div>
+              <span className="canvas-view-title">
+                {view === "tree"
+                  ? "Семейное древо"
+                  : view === "family"
+                    ? "Родственники"
+                    : "Фотоальбом"}
+              </span>
               {view === "tree" && (
                 <div className="scope-switch">
                   <button
@@ -2619,12 +2615,62 @@ function App() {
                 )}
               </div>
             ) : view === "tree" && !visiblePeople.length ? (
-              <div className="inline-empty"><Icon name="search" size={30}/><h2>Никого не нашли</h2><p>Попробуйте другое имя или поколение.</p><button className="button ghost" onClick={() => {setQuery(""); setGenerationFilter("all");}}>Сбросить фильтры</button></div>
+              <div className="inline-empty">
+                <Icon name="search" size={30} />
+                <h2>Никого не нашли</h2>
+                <p>Попробуйте другое имя или поколение.</p>
+                <button
+                  className="button ghost"
+                  onClick={() => {
+                    setQuery("");
+                    setGenerationFilter("all");
+                  }}
+                >
+                  Сбросить фильтры
+                </button>
+              </div>
             ) : view === "tree" ? (
               <>
                 <div
                   className="tree-board"
                   ref={boardRef}
+                  onPointerDown={(event) => {
+                    if (
+                      event.pointerType === "touch" ||
+                      event.button !== 0 ||
+                      event.target.closest(
+                        "button, input, select, .positioned-person",
+                      )
+                    )
+                      return;
+                    panRef.current = {
+                      id: event.pointerId,
+                      x: event.clientX,
+                      y: event.clientY,
+                      left: event.currentTarget.scrollLeft,
+                      top: event.currentTarget.scrollTop,
+                    };
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    event.currentTarget.classList.add("is-panning");
+                  }}
+                  onPointerMove={(event) => {
+                    const pan = panRef.current;
+                    if (!pan || pan.id !== event.pointerId) return;
+                    event.currentTarget.scrollLeft =
+                      pan.left - (event.clientX - pan.x);
+                    event.currentTarget.scrollTop =
+                      pan.top - (event.clientY - pan.y);
+                  }}
+                  onPointerUp={(event) => {
+                    if (panRef.current?.id !== event.pointerId) return;
+                    panRef.current = null;
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                    event.currentTarget.classList.remove("is-panning");
+                  }}
+                  onPointerCancel={(event) => {
+                    panRef.current = null;
+                    event.currentTarget.classList.remove("is-panning");
+                  }}
                   onMouseDown={(event) => {
                     if (event.target === event.currentTarget)
                       setSelectedId(null);
