@@ -821,3 +821,9 @@
     bottom: 34px;
   }
 }
+
+@media (max-height: 800px) and (min-width: 651px) {
+  .canvas-footer {
+    bottom: 30px;
+  }
+}

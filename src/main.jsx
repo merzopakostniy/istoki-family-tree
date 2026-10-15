@@ -1453,7 +1453,7 @@ function App() {
         0,
         contentTop * scale -
           Math.max(
-            108,
+            board.clientWidth > 650 && board.clientHeight < 740 ? 80 : 108,
             (board.clientHeight - familyLayout.contentHeight * scale) / 2,
           ),
       ),
@@ -1473,6 +1473,16 @@ function App() {
     const fittedScale = Math.max(0.08, Math.min(1, widthScale, heightScale));
     return +fittedScale.toFixed(2);
   };
+  const initialTreeScale = () => {
+    const board = boardRef.current;
+    if (!board || treeScope !== "branch") return treeScale();
+    if (board.clientWidth <= 650) return 1;
+    const topInset = board.clientHeight < 740 ? 80 : 108;
+    const heightScale =
+      (board.clientHeight - topInset - 80) / familyLayout.contentHeight;
+    const widthScale = (board.clientWidth - 48) / familyLayout.contentWidth;
+    return +Math.max(0.8, Math.min(1, heightScale, widthScale)).toFixed(2);
+  };
   const fitTree = () => {
     const fittedScale = treeScale();
     if (fittedScale != null) setScale(fittedScale);
@@ -1487,11 +1497,8 @@ function App() {
     if (!board || !board.clientWidth) return;
     didAutoFit.current = true;
     const frame = requestAnimationFrame(() => {
-      const fittedScale = treeScale();
-      if (fittedScale != null)
-        setScale(
-          treeScope === "branch" ? Math.max(1, fittedScale) : fittedScale,
-        );
+      const fittedScale = initialTreeScale();
+      if (fittedScale != null) setScale(fittedScale);
     });
     return () => cancelAnimationFrame(frame);
   }, [
@@ -1550,14 +1557,8 @@ function App() {
   ]);
   useEffect(() => {
     const handleResize = () => {
-      const fitted = treeScale();
-      if (fitted != null)
-        setScale(
-          window.matchMedia("(max-width: 650px)").matches &&
-            treeScope === "branch"
-            ? Math.max(1, fitted)
-            : fitted,
-        );
+      const fitted = initialTreeScale();
+      if (fitted != null) setScale(fitted);
       requestAnimationFrame(() => centerTree("auto"));
     };
     window.addEventListener("resize", handleResize);
