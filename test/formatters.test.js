@@ -7,7 +7,10 @@ test("lifespan displays both dates as a range", () => {
 });
 
 test("lifespan preserves complete birth and death dates", () => {
-  assert.equal(formatLifespan({ birth: "05.08.1986", death: "24.12.2020" }), "05.08.1986 — 24.12.2020");
+  assert.equal(
+    formatLifespan({ birth: "05.08.1986", death: "24.12.2020" }),
+    "05.08.1986 — 24.12.2020",
+  );
 });
 
 test("lifespan labels a birth-only date", () => {
@@ -20,4 +23,11 @@ test("lifespan labels a death-only date", () => {
 
 test("lifespan handles missing dates", () => {
   assert.equal(formatLifespan({ birth: "", death: "" }), "Нет данных");
+});
+
+test("chronological sorting understands Russian dates and missing values", async () => {
+  const { dateSortValue } = await import("../src/formatters.js");
+  assert.ok(dateSortValue("30.12.1890") < dateSortValue("01.01.1900"));
+  assert.ok(dateSortValue("1900") < dateSortValue("01.01.1901"));
+  assert.equal(dateSortValue("не известно"), Infinity);
 });
