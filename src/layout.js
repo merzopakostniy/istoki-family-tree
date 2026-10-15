@@ -1,7 +1,7 @@
-export const CARD_WIDTH = 258;
-export const CARD_HEIGHT = 134;
-export const COUPLE_GAP = 34;
-export const GENERATION_GAP = 224;
+export const CARD_WIDTH = 208;
+export const CARD_HEIGHT = 264;
+export const COUPLE_GAP = 48;
+export const GENERATION_GAP = 368;
 export const STAGE_PADDING = 72;
 export const STAGE_TOP = 52;
 export const STAGE_BOTTOM = 82;
@@ -11,8 +11,8 @@ export const DEFAULT_CANVAS_MARGIN = 1200;
 export const DEFAULT_CANVAS_TOP_MARGIN = 140;
 export const DEFAULT_CANVAS_BOTTOM_MARGIN = 70;
 
-const SIBLING_UNIT_GAP = 30;
-const BRANCH_UNIT_GAP = 68;
+const SIBLING_UNIT_GAP = 52;
+const BRANCH_UNIT_GAP = 112;
 const MIN_STAGE_WIDTH = 940;
 
 function average(values) {

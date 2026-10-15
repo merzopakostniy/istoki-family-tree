@@ -4,6 +4,7 @@ import {
   buildCanvasFrame,
   buildFamilyLayout,
   CARD_WIDTH,
+  CARD_HEIGHT,
   COUPLE_GAP,
   MANUAL_POSITION_VERSION,
 } from "../src/layout.js";
@@ -209,7 +210,7 @@ test("current manual coordinates can extend the canvas left and upward", () => {
   assert.equal(frame.offsetX, 1840);
   assert.equal(frame.offsetY, 560);
   assert.equal(frame.width, layout.contentWidth + 2400);
-  assert.equal(frame.height, 360);
+  assert.equal(frame.height, Math.max(360, CARD_HEIGHT + 210));
 });
 
 test("manual card placement automatically shortens the canvas height", () => {
@@ -229,10 +230,10 @@ test("manual card placement automatically shortens the canvas height", () => {
   const frame = buildCanvasFrame(layout);
 
   assert.equal(layout.contentTop, 100);
-  assert.equal(layout.contentBottom, 434);
-  assert.equal(layout.contentHeight, 334);
+  assert.equal(layout.contentBottom, 300 + CARD_HEIGHT);
+  assert.equal(layout.contentHeight, 200 + CARD_HEIGHT);
   assert.equal(frame.offsetY, 40);
-  assert.equal(frame.height, 544);
+  assert.equal(frame.height, 410 + CARD_HEIGHT);
 });
 
 test("rows never overlap after hierarchy compaction", () => {
